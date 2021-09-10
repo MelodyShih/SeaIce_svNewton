@@ -96,9 +96,9 @@ def hessian_NewtonStandard(u, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o,
 	'''
 	Creates the weak form for the Hessian of the standard Newton linearization:
 	
-	    A'(u)(w, ute) = \int rho_ice*H*w*ute
+	    A'(u)(w, ute) = #TODO: need to update 
+
 	where
-	
 	    utr = u_trial = TrialFunction of the velocity space
 	    ute = u_test = TestFunction of the velocity space
 	'''
@@ -132,11 +132,8 @@ def hessian_NewtonStressvel(u, S, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, 
 	'''
 	Creates the weak form for the Hessian of the stress-vel Newton linearization:
 	
-	    A'(u)(w, ute) = \int rho_ice*H*w*ute
-	where
-	
-	    utr = u_trial = TrialFunction of the velocity space
-	    ute = u_test = TestFunction of the velocity space
+	#TODO: need to update
+
 	'''
 	utr = fd.TrialFunction(FncSp)
 	ute = fd.TestFunction(FncSp)
@@ -164,6 +161,9 @@ def hessian_NewtonStressvel(u, S, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, 
 	return hess
 
 def hessian_dualStep(u, ustep, S, DualFncSp, delta_min):
+    '''
+    Creates the weak form for step of dual variable
+    '''
 	Ste = fd.TestFunction(DualFncSp)
 
 	tau_u     = tau(u)
@@ -176,6 +176,9 @@ def hessian_dualStep(u, ustep, S, DualFncSp, delta_min):
 	return S_step
 
 def dualresidual(S, u, DualFncSp, delta_min):
+    '''
+    Creates the weak form for residual of dual variable 
+    '''
 	Ste = fd.TestFunction(DualFncSp)
 	tau_u   = tau(u)
 	delta = fd.sqrt(delta_min**2+2*fd.inner(tau_u,tau_u))

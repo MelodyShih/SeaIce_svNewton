@@ -6,7 +6,7 @@ PETSc.Sys.popErrorHandler()
 ##################################################
 ##
 ## Nonlinear eq:
-##  A(v_n, phi) = F(phi)
+##  A(v_n, phi) = F(phi) - A(v_{n-1}, phi)
 ##  A(v_n, phi) = (rho_ice H_n v_n, phi_v) + k (rho_ice H_n f_c e_r x v_n, phi_v)
 ##                                         + k (sigma(v_n, H_n, A_n, grad(phi)
 ##                                         - k (tau_ocean(t_n, v_n), phi)
@@ -32,8 +32,8 @@ args, _ = parser.parse_known_args()
 
 #======================================
 # nolinear solver parameters
-MONITOR_NL_ITER=True
-MONITOR_NL_STEPSEARCH=False
+MONITOR_NL_ITER = True
+MONITOR_NL_STEPSEARCH = False
 NL_SOLVER_GRAD_RTOL = 1e-8
 NL_SOLVER_GRAD_STEP_RTOL = 1e-8
 NL_SOLVER_MAXITER = 10
