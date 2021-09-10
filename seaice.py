@@ -55,11 +55,13 @@ delta_t = 0.02 # 30 min.
 # v: sea ice velocity (P_k)
 # A: sea ice concentration (P_k-2)
 # H: mean sea ice thickness (P_k-2)
-velt = FiniteElement("CG", mesh.ufl_cell(), 1)
+velt  = FiniteElement("CG", mesh.ufl_cell(), 1)
+vdelt = TensorElement("DG", mesh.ufl_cell(), 1)
 Aelt = FiniteElement("DG", mesh.ufl_cell(), 0)
 Helt = FiniteElement("DG", mesh.ufl_cell(), 0)
 
 V = VectorFunctionSpace(mesh, velt)
+Vd= FunctionSpace(mesh, vdelt)
 A = FunctionSpace(mesh, Aelt)
 H = FunctionSpace(mesh, Helt)
 
@@ -136,8 +138,19 @@ grad = WeakForm.gradient(sol_u, sol_A, sol_H, V, rhoice, delta_t, Ca, rhoa, v_a,
 if args.linearization == 'stdnewton':
     hess = WeakForm.hessian_NewtonStandard(sol_u, sol_A, sol_H, V, rhoice, \
                delta_t, Ca, rhoa, v_a, Cw, rhow, v_ocean, delta_min, Pstar, fc)
+elif args.linearization == 'stressvel':
+    if Vd is None:
+        raise ValueError("stressvel not implemented for discretisation %s" \
+                                   % vvstokesprob.discretisation)
+    S      = Function(Vd)
+    S_step = Function(Vd)
+    S_proj = Function(Vd)
+    S_prev = Function(Vd)
 
-# set weak form of Hessian and forms related to the linearization
+    dualStep = WeakForm.hessian_dualStep(sol_u, step_u, S, Vd, delta_min)
+    dualres = WeakForm.dualresidual(S, sol_u, Vd, delta_min)
+    hess = WeakForm.hessian_NewtonStressvel(sol_u, S, sol_A, sol_H, V, rhoice, \
+               delta_t, Ca, rhoa, v_a, Cw, rhow, v_ocean, delta_min, Pstar, fc)
 else:
     raise ValueError("unknown type of linearization %s" % args.linearization)
 
@@ -152,6 +165,9 @@ lin_it_total = 0
 obj_val      = norm(assemble(obj))
 step_length  = 0.0
 
+if args.linearization == 'stressvel':
+    Vdmassweak = inner(TrialFunction(Vd), TestFunction(Vd)) * dx
+    Md = assemble(Vdmassweak)
 if MONITOR_NL_ITER:
     PETSc.Sys.Print('{0:<3} "{1:>6}"{2:^20}{3:^14}{4:^15}{5:^10}'.format(
           "Itn", "default", "Energy", "||g||_l2", 
@@ -176,12 +192,31 @@ for itn in range(NL_SOLVER_MAXITER+1):
         PETSc.Sys.Print("Stop reason: Step search reached maximum number of backtracking.")
         break
 
+    # set up the linearized system
+    if args.linearization == 'stressvel':
+        if 0 == itn:
+            Abstract.Vector.setZero(S)
+            Abstract.Vector.setZero(S_step)
+            Abstract.Vector.setZero(S_proj)
+        else:
+            # project S to unit sphere
+            Sprojweak = WeakForm.hessian_dualUpdate_boundMaxMagnitude(S, Vd, 1.0)
+            b = assemble(Sprojweak)
+            solve(Md, S_proj.vector(), b)
+
     # assemble linearized system
     problem = LinearVariationalProblem(hess, grad, step_u, bcs=bcstep_u)
     solver  = LinearVariationalSolver(problem, options_prefix="ns_")
     solver.solve()
     lin_it=solver.snes.ksp.getIterationNumber()
     lin_it_total += lin_it
+
+    # solve dual variable step
+    if args.linearization == 'stressvel':
+        Abstract.Vector.scale(step_u, -1.0)
+        b = assemble(dualStep)
+        solve(Md, S_step.vector(), b)
+        Abstract.Vector.scale(step_u, -1.0)
     
     # compute the norm of the gradient
     g = assemble(grad, bcs=bcstep_u)
@@ -206,6 +241,8 @@ for itn in range(NL_SOLVER_MAXITER+1):
            PETSc.Sys.Print("Step search: {0:>2d}{1:>10f}{2:>20.12e}{3:>20.12e}".format(
                  j, step_length, obj_val_next, obj_val))
         if obj_val_next < obj_val + step_length*NL_SOLVER_STEP_ARMIJO*angle_grad_step:
+            if args.linearization == 'stressvel':
+                S.vector().axpy(step_length, S_step.vector())
             obj_val = obj_val_next
             step_success = True
             break

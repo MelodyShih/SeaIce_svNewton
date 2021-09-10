@@ -126,3 +126,65 @@ def hessian_NewtonStandard(u, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o,
 	hess += delta_t*dsigmadu - delta_t*dtauodu
            
 	return hess
+
+def hessian_NewtonStressvel(u, S, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o, 
+	                       rho_o, v_o, delta_min, Pstar, f_c):
+	'''
+	Creates the weak form for the Hessian of the stress-vel Newton linearization:
+	
+	    A'(u)(w, ute) = \int rho_ice*H*w*ute
+	where
+	
+	    utr = u_trial = TrialFunction of the velocity space
+	    ute = u_test = TestFunction of the velocity space
+	'''
+	utr = fd.TrialFunction(FncSp)
+	ute = fd.TestFunction(FncSp)
+	er_x_utr  = fd.as_vector([  -utr[1],   utr[0]])
+
+	hess =         rho_i*H*fd.inner(utr,ute)*fd.dx + \
+	       delta_t*rho_i*H*f_c*fd.inner(er_x_utr,ute)*fd.dx
+
+	# d(sigma)/d(u)
+	P  = Pstar*H*fd.exp(-20*(1.0-A))
+	tau_u   = tau(u)
+	tau_ute = tau(ute)
+	tau_utr = tau(utr) 
+	delta = fd.sqrt(delta_min**2+2*fd.inner(tau_u,tau_u))
+	dtaudu = tau(utr) 
+	dsigmadu =   P/delta*fd.inner(dtaudu,tau_ute)*fd.dx + \
+               -(P/delta**2)*2*fd.inner(tau_u,tau_utr)*fd.inner(S,tau_ute)*fd.dx 
+
+	## dtau_ocean/du
+	dtauodu = -rho_o*C_o*fd.sqrt(fd.inner(v_o-u, v_o-u))*fd.inner(utr,ute)*fd.dx + \
+	          -rho_o*C_o/fd.sqrt(fd.inner(v_o-u, v_o-u))*fd.inner(v_o-u,utr)*fd.inner(v_o-u,ute)*fd.dx
+
+	hess += delta_t*dsigmadu - delta_t*dtauodu
+           
+	return hess
+
+def hessian_dualStep(u, ustep, S, DualFncSp, delta_min):
+	Ste = fd.TestFunction(DualFncSp)
+
+	tau_u     = tau(u)
+	tau_ustep = tau(ustep)
+	delta    = fd.sqrt(delta_min**2+2*fd.inner(tau_u,tau_u))
+	delta_sq = delta_min**2+2*fd.inner(tau_u,tau_u)
+	S_step = -fd.inner(S,Ste)*fd.dx - \
+             2.0/delta_sq*fd.inner(tau_ustep, tau_u)*fd.inner(S,Ste)*fd.dx +\
+             1.0/delta*fd.inner(tau_ustep+tau_u, Ste)*fd.dx
+	return S_step
+
+def dualresidual(S, u, DualFncSp, delta_min):
+	Ste = fd.TestFunction(DualFncSp)
+	tau_u   = tau(u)
+	delta = fd.sqrt(delta_min**2+2*fd.inner(tau_u,tau_u))
+	res = delta*fd.inner(S, Ste)*fd.dx - fd.inner(tau_u, Ste)*fd.dx
+	return res
+
+def hessian_dualUpdate_boundMaxMagnitude(S, DualFncSp, max_magn):
+	S_test = fd.TestFunction(DualFncSp)
+	S_rescaled = fd.conditional( fd.lt(fd.inner(S, S), max_magn*max_magn),\
+	                fd.inner(S, S_test),\
+	                fd.inner(S, S_test)/fd.sqrt(fd.inner(S,S))*max_magn)*fd.dx
+	return S_rescaled
