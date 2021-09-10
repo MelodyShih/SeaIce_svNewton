@@ -221,8 +221,7 @@ for itn in range(NL_SOLVER_MAXITER+1):
     # compute the norm of the gradient
     g = assemble(grad, bcs=bcstep_u)
     g_norm = norm(g)
-    print(norm(sol_u))
-    print(g_norm)
+
     # compute angle between step and (negative) gradient
     angle_grad_step = -step_u.vector().inner(g)
     if 0 == itn:
