@@ -61,7 +61,7 @@ def gradient(u, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o, rho_o, v_o,
 	
 	    F(ute) - A(u, ute) = 
 	    \int rho_ice*H_n*u*ute + delta_t*tau_atm(t_n)*ute + 
-	                           + delta_t*rho_ice*H_n*h_c*e_r x v_ocean*ute
+	                           + delta_t*rho_ice*H_n*h_c*(e_r x v_ocean)*ute
 	    - 
 	    \int rho_ice*H_n*u*ute + delta_t*rho_ice*H_n*f_c*(e_r x u)*ute
 	                           + delta_t*sigma_n(A_n,H_n,u)*grad(ute)
@@ -73,6 +73,7 @@ def gradient(u, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o, rho_o, v_o,
 	    
 	tau_a = tau_atm(C_a, rho_a, v_a)
 	tau_o = tau_ocean(C_o, rho_o, u, v_o)
+
 	er_x_vo = fd.as_vector([-v_o[1], v_o[0]])
 	er_x_u  = fd.as_vector([  -u[1],   u[0]])
 
@@ -89,6 +90,7 @@ def gradient(u, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o, rho_o, v_o,
          - delta_t*P*fd.tr(Ete)*fd.dx\
          - delta_t*fd.inner(tau_o, ute)*fd.dx
 	grad = F-AA
+
 	return grad
 
 def hessian_NewtonStandard(u, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o, 
@@ -161,9 +163,9 @@ def hessian_NewtonStressvel(u, S, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, 
 	return hess
 
 def hessian_dualStep(u, ustep, S, DualFncSp, delta_min):
-    '''
-    Creates the weak form for step of dual variable
-    '''
+	'''
+	Creates the weak form for step of dual variable
+	'''
 	Ste = fd.TestFunction(DualFncSp)
 
 	tau_u     = tau(u)
@@ -176,9 +178,9 @@ def hessian_dualStep(u, ustep, S, DualFncSp, delta_min):
 	return S_step
 
 def dualresidual(S, u, DualFncSp, delta_min):
-    '''
-    Creates the weak form for residual of dual variable 
-    '''
+	'''
+	Creates the weak form for residual of dual variable 
+	'''
 	Ste = fd.TestFunction(DualFncSp)
 	tau_u   = tau(u)
 	delta = fd.sqrt(delta_min**2+2*fd.inner(tau_u,tau_u))
