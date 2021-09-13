@@ -151,7 +151,7 @@ elif args.linearization == 'stressvel':
 
     dualStep = WeakForm.hessian_dualStep(sol_u, step_u, S, Vd, delta_min)
     dualres = WeakForm.dualresidual(S, sol_u, Vd, delta_min)
-    hess = WeakForm.hessian_NewtonStressvel(sol_u, S, sol_A, sol_H, V, rhoice, \
+    hess = WeakForm.hessian_NewtonStressvel(sol_u, S_proj, sol_A, sol_H, V, rhoice, \
                delta_t, Ca, rhoa, v_a, Co, rhoo, v_ocean, delta_min, Pstar, fc)
 else:
     raise ValueError("unknown type of linearization %s" % args.linearization)
@@ -202,7 +202,7 @@ for itn in range(NL_SOLVER_MAXITER+1):
             Abstract.Vector.setZero(S_proj)
         else:
             # project S to unit sphere
-            Sprojweak = WeakForm.hessian_dualUpdate_boundMaxMagnitude(S, Vd, 1.0)
+            Sprojweak = WeakForm.hessian_dualUpdate_boundMaxMagnitude(S, Vd, 0.5)
             b = assemble(Sprojweak)
             solve(Md, S_proj.vector(), b)
 
