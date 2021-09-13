@@ -99,16 +99,21 @@ def gradient(u, uprev, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o, rho_o,
 
 	P  = Pstar*H*fd.exp(-20*(1.0-A))
 	F  = rho_i*H*fd.inner(uprev, ute)*fd.dx + \
-	     delta_t*fd.inner(tau_a, ute)*fd.dx#\
-	     #+ delta_t*rho_i*H*f_c*fd.inner(er_x_vo, ute)*fd.dx 
+	     delta_t*fd.inner(tau_a, ute)*fd.dx
+
 
 	AA = rho_i*H*fd.inner(u, ute)*fd.dx\
 	     + delta_t*P/fd.sqrt(delta_min**2 + 2*fd.inner(tau_u, tau_u))*fd.inner(tau_u, tau_ute)*fd.dx\
-	     - delta_t*P*fd.tr(Ete)*fd.dx#\
-	     #+ delta_t*rho_i*H*f_c*fd.inner(er_x_u , ute)*fd.dx
+	     - delta_t*P*fd.tr(Ete)*fd.dx
 
 	if (abs(C_o) > 1e-15):
 		AA += - delta_t*fd.inner(tau_o, ute)*fd.dx	
+
+	# Coriolis:
+	if (abs(f_c) > 1e-15):
+	    F += delta_t*rho_i*H*f_c*fd.inner(er_x_vo, ute)*fd.dx 
+	    AA += delta_t*rho_i*H*f_c*fd.inner(er_x_u , ute)*fd.dx
+
 
 	grad = AA - F
 
@@ -129,8 +134,7 @@ def hessian_NewtonStandard(u, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o,
 	ute = fd.TestFunction(FncSp)
 	er_x_utr  = fd.as_vector([  -utr[1],   utr[0]])
 
-	hess =         rho_i*H*fd.inner(utr,ute)*fd.dx#\
-	       #delta_t*rho_i*H*f_c*fd.inner(er_x_utr,ute)*fd.dx
+	hess =         rho_i*H*fd.inner(utr,ute)*fd.dx
 
 	# d(sigma)/d(u)
 	P  = Pstar*H*fd.exp(-20*(1.0-A))
@@ -138,8 +142,8 @@ def hessian_NewtonStandard(u, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o,
 	tau_ute = tau(ute)
 	tau_utr = tau(utr) 
 	delta  = fd.sqrt(delta_min**2+2*fd.inner(tau_u,tau_u))
-	dsigmadu =   P/delta*fd.inner(tau_utr,tau_ute)*fd.dx + \
-               -(P/delta**3)*2*fd.inner(tau_u,tau_utr)*fd.inner(tau_u,tau_ute)*fd.dx 
+	dsigmadu =         P/delta*fd.inner(tau_utr,tau_ute)*fd.dx + \
+	           -(P/delta**3)*2*fd.inner(tau_u  ,tau_utr)*fd.inner(tau_u,tau_ute)*fd.dx 
 
 	hess += delta_t*dsigmadu
 
@@ -149,6 +153,9 @@ def hessian_NewtonStandard(u, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o,
 	    	      -rho_o*C_o/fd.sqrt(fd.inner(v_o-u, v_o-u))*fd.inner(v_o-u,utr)*fd.inner(v_o-u,ute)*fd.dx
 		hess += delta_t*dtauodu
 
+	# Coriolis:
+	if (abs(f_c) > 1e-15):
+	    hess += delta_t*rho_i*H*f_c*fd.inner(er_x_utr,ute)*fd.dx
            
 	return hess
 
@@ -164,8 +171,7 @@ def hessian_NewtonStressvel(u, S, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, 
 	ute = fd.TestFunction(FncSp)
 	er_x_utr  = fd.as_vector([  -utr[1],   utr[0]])
 
-	hess =         rho_i*H*fd.inner(utr,ute)*fd.dx #+ \
-	       #delta_t*rho_i*H*f_c*fd.inner(er_x_utr,ute)*fd.dx
+	hess = rho_i*H*fd.inner(utr,ute)*fd.dx
 
 	# d(sigma)/d(u)
 	P  = Pstar*H*fd.exp(-20*(1.0-A))
@@ -174,8 +180,7 @@ def hessian_NewtonStressvel(u, S, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, 
 	tau_utr = tau(utr) 
 	delta = fd.sqrt(delta_min**2+2*fd.inner(tau_u,tau_u))
 	dsigmadu =         P/delta*fd.inner(tau_utr,tau_ute)*fd.dx\
-               -(P/delta**2)*2*fd.inner(tau_u,tau_utr)*fd.inner(S,tau_ute)*fd.dx 
-               #-(P/delta**2)*2*(fd.inner(tau_u,tau_utr)*fd.inner(S,tau_ute) + fd.inner(S,tau_utr)*fd.inner(tau_u,tau_ute))*fd.dx 
+	           -(P/delta**2)*2*fd.inner(tau_u  ,tau_utr)*fd.inner(S,tau_ute)*fd.dx 
 
 	hess += delta_t*dsigmadu
 
@@ -184,7 +189,11 @@ def hessian_NewtonStressvel(u, S, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, 
 		dtauodu = -rho_o*C_o*fd.sqrt(fd.inner(v_o-u, v_o-u))*fd.inner(utr,ute)*fd.dx + \
 	    	      -rho_o*C_o/fd.sqrt(fd.inner(v_o-u, v_o-u))*fd.inner(v_o-u,utr)*fd.inner(v_o-u,ute)*fd.dx
 		hess += delta_t*dtauodu
-           
+
+	# Coriolis:
+	if (abs(f_c) > 1e-15):
+	    hess += rho_i*H*f_c*fd.inner(er_x_utr,ute)*fd.dx
+
 	return hess
 
 def hessian_dualStep(u, ustep, S, DualFncSp, delta_min):

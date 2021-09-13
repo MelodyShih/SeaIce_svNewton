@@ -31,18 +31,21 @@ parser.add_argument("--linearization", type=str, default="stdnewton")
 args, _ = parser.parse_known_args()
 
 #======================================
-# nolinear solver parameters
+## nolinear solver parameters
 MONITOR_NL_ITER = True
 MONITOR_NL_STEPSEARCH = False
 NL_SOLVER_GRAD_RTOL = 1e-8
-NL_SOLVER_GRAD_STEP_RTOL = 1e-16
-NL_SOLVER_MAXITER = 100
+NL_SOLVER_GRAD_STEP_RTOL = 1e-8
+NL_SOLVER_MAXITER = 50
 NL_SOLVER_STEP_MAXITER = 15
 NL_SOLVER_STEP_ARMIJO    = 1.0e-4
 
+## Output
+OUTPUT_VTK = True
+
 ## Scaling
 T = 1e3/60/24 # 1e3 second
-L = 1e3       # 1e3 m
+L = 1e2       # 1e3 m
 G = 1         # 1 m
 
 ## Domain: (0,1)x(0,1)
@@ -60,8 +63,8 @@ delta_t = 0.02 # 30 min.
 # H: mean sea ice thickness (P_k-2)
 velt  = FiniteElement("CG", mesh.ufl_cell(), 1)
 vdelt = TensorElement("DG", mesh.ufl_cell(), 1)
-Aelt = FiniteElement("DG", mesh.ufl_cell(), 0)
-Helt = FiniteElement("DG", mesh.ufl_cell(), 0)
+Aelt  = FiniteElement("DG", mesh.ufl_cell(), 0)
+Helt  = FiniteElement("DG", mesh.ufl_cell(), 0)
 
 V = VectorFunctionSpace(mesh, velt)
 Vd= FunctionSpace(mesh, vdelt)
@@ -70,7 +73,7 @@ H = FunctionSpace(mesh, Helt)
 
 ## Parameteres
 # fc: Coriolis
-fc = 0.0 #1.46e-4*T #s^{-1}
+fc = 1.46e-4*T #s^{-1}
 # air drag coeff.
 Ca = 1.2e-3*L/G 
 # water drag coeff.
@@ -122,12 +125,9 @@ my = Constant(0.0)
 WeakForm.update_va(mx, my, 0.0, X, v_a, T, L)
 
 # visualize initial value
-File("v_ocean.pvd").write(v_ocean)
-er_x_vo_fun = Function(V)
-er_x_vo_fun.interpolate(er_x_vo)
-File("er_x_vo.pvd").write(er_x_vo_fun)
-File("v_a.pvd").write(v_a)
-File("H.pvd").write(sol_H)
+File("vtk/initial_vo.pvd").write(v_ocean)
+File("vtk/initial_va.pvd").write(v_a)
+File("vtk/initial_H.pvd").write(sol_H)
 
 ## Weak Form
 # set weak forms of objective functional and gradient
@@ -268,3 +268,9 @@ PETSc.Sys.Print("%s: #iter %i, ||g|| reduction %3e, (grad,step) reduction %3e, #
 #======================================
 # Output
 #======================================
+
+# output vtk file for solutions
+if OUTPUT_VTK:
+    File("vtk/solution_u.pvd").write(sol_u)
+    File("vtk/solution_A.pvd").write(sol_A)
+    File("vtk/solution_H.pvd").write(sol_H)
