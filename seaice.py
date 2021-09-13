@@ -70,11 +70,11 @@ H = FunctionSpace(mesh, Helt)
 
 ## Parameteres
 # fc: Coriolis
-fc = 1.46e-4*T #s^{-1}
+fc = 0.0 #1.46e-4*T #s^{-1}
 # air drag coeff.
 Ca = 1.2e-3*L/G 
 # water drag coeff.
-Co = 5.5e-3*L/G
+Co = 0.0 #5.5e-3*L/G
 # air density
 rhoa = 1.3 #kg/m^3 
 rhoo = 1026 #kg/m^3

@@ -54,14 +54,34 @@ def tau(u):
 	I = fd.Identity(2)
 	return 1./e*fd.dev(E) + 0.5*fd.tr(E)*I
 
+#=======================================
+# Objective 
+#=======================================
+def objective(u, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o, rho_o, v_o, 
+             delta_min, Pstar, f_c):
+	'''
+	Creates the weak form for the objective functional:
+	
+	where
+	'''
+	tau_u   = tau(u)
+	delta  = fd.sqrt(delta_min**2+2*fd.inner(tau_u,tau_u))
+	P  = Pstar*H*fd.exp(-20*(1.0-A))
+	obj = delta_t* P/2*delta*fd.dx 
+	return 0
+        
+#=======================================
+# Linearization
+#=======================================
+
 def gradient(u, uprev, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o, rho_o, v_o, 
              delta_min, Pstar, f_c):
 	'''
 	Creates the weak form for the gradient:
 	
 	    F(ute) - A(u, ute) = 
-	    \int rho_ice*H_n*u*ute + delta_t*tau_atm(t_n)*ute + 
-	                           + delta_t*rho_ice*H_n*h_c*(e_r x v_ocean)*ute
+	    \int rho_ice*H_n*uprev*ute + delta_t*tau_atm(t_n)*ute + 
+	                               + delta_t*rho_ice*H_n*h_c*(e_r x v_ocean)*ute
 	    - 
 	    \int rho_ice*H_n*u*ute + delta_t*rho_ice*H_n*f_c*(e_r x u)*ute
 	                           + delta_t*sigma_n(A_n,H_n,u)*grad(ute)
@@ -83,15 +103,15 @@ def gradient(u, uprev, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o, rho_o,
 
 	P  = Pstar*H*fd.exp(-20*(1.0-A))
 	F  = rho_i*H*fd.inner(uprev, ute)*fd.dx + \
-	     delta_t*fd.inner(tau_a, ute)*fd.dx + \
-	     delta_t*rho_i*H*f_c*fd.inner(er_x_vo, ute)*fd.dx 
+	     delta_t*fd.inner(tau_a, ute)*fd.dx\
+	     #+ delta_t*rho_i*H*f_c*fd.inner(er_x_vo, ute)*fd.dx 
 
-	AA = rho_i*H*fd.inner(u, ute)*fd.dx + \
-	     delta_t*rho_i*H*f_c*fd.inner(er_x_u , ute)*fd.dx +\
-	     delta_t*P/fd.sqrt(delta_min**2 + 2*fd.inner(tau_u, tau_u))*fd.inner(tau_u, tau_ute)*fd.dx\
-	     - delta_t*P*fd.tr(Ete)*fd.dx\
-	     - delta_t*fd.inner(tau_o, ute)*fd.dx
-	grad = F-AA
+	AA = rho_i*H*fd.inner(u, ute)*fd.dx\
+	     + delta_t*P/fd.sqrt(delta_min**2 + 2*fd.inner(tau_u, tau_u))*fd.inner(tau_u, tau_ute)*fd.dx\
+	     - delta_t*P*fd.tr(Ete)*fd.dx#\
+	     #- delta_t*fd.inner(tau_o, ute)*fd.dx #\
+	     #+ delta_t*rho_i*H*f_c*fd.inner(er_x_u , ute)*fd.dx +\
+	grad = AA - F
 
 	return grad
 
@@ -110,24 +130,24 @@ def hessian_NewtonStandard(u, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o,
 	ute = fd.TestFunction(FncSp)
 	er_x_utr  = fd.as_vector([  -utr[1],   utr[0]])
 
-	hess =         rho_i*H*fd.inner(utr,ute)*fd.dx + \
-	       delta_t*rho_i*H*f_c*fd.inner(er_x_utr,ute)*fd.dx
+	hess =         rho_i*H*fd.inner(utr,ute)*fd.dx#\
+	       #delta_t*rho_i*H*f_c*fd.inner(er_x_utr,ute)*fd.dx
 
 	# d(sigma)/d(u)
 	P  = Pstar*H*fd.exp(-20*(1.0-A))
 	tau_u   = tau(u)
 	tau_ute = tau(ute)
 	tau_utr = tau(utr) 
-	delta = fd.sqrt(delta_min**2+2*fd.inner(tau_u,tau_u))
+	delta  = fd.sqrt(delta_min**2+2*fd.inner(tau_u,tau_u))
 	dtaudu = tau(utr) 
 	dsigmadu =   P/delta*fd.inner(dtaudu,tau_ute)*fd.dx + \
                -(P/delta**3)*2*fd.inner(tau_u,tau_utr)*fd.inner(tau_u,tau_ute)*fd.dx 
 
 	## dtau_ocean/du
-	dtauodu = -rho_o*C_o*fd.sqrt(fd.inner(v_o-u, v_o-u))*fd.inner(utr,ute)*fd.dx + \
-	          -rho_o*C_o/fd.sqrt(fd.inner(v_o-u, v_o-u))*fd.inner(v_o-u,utr)*fd.inner(v_o-u,ute)*fd.dx
+	#dtauodu = -rho_o*C_o*fd.sqrt(fd.inner(v_o-u, v_o-u))*fd.inner(utr,ute)*fd.dx + \
+	#          -rho_o*C_o/fd.sqrt(fd.inner(v_o-u, v_o-u))*fd.inner(v_o-u,utr)*fd.inner(v_o-u,ute)*fd.dx
 
-	hess += delta_t*dsigmadu - delta_t*dtauodu
+	hess += delta_t*dsigmadu #- delta_t*dtauodu
            
 	return hess
 
@@ -143,8 +163,8 @@ def hessian_NewtonStressvel(u, S, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, 
 	ute = fd.TestFunction(FncSp)
 	er_x_utr  = fd.as_vector([  -utr[1],   utr[0]])
 
-	hess =         rho_i*H*fd.inner(utr,ute)*fd.dx + \
-	       delta_t*rho_i*H*f_c*fd.inner(er_x_utr,ute)*fd.dx
+	hess =         rho_i*H*fd.inner(utr,ute)*fd.dx #+ \
+	       #delta_t*rho_i*H*f_c*fd.inner(er_x_utr,ute)*fd.dx
 
 	# d(sigma)/d(u)
 	P  = Pstar*H*fd.exp(-20*(1.0-A))
