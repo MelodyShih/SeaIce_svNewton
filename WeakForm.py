@@ -61,8 +61,8 @@ def objective(u, uprev, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o,
 	obj = obj_rhoHu + obj_divsigma - obj_F
 
 	if (abs(C_o)>1e-15):
-		obj_ocean = 1./3*C_o*rho_o*fd.sqrt(fd.inner(v_o-u, v_o-u))**3*fd.dx
-		obj += obj_ocean
+		obj_ocean = delta_t*-1./3*C_o*rho_o*fd.sqrt(fd.inner(v_o-u, v_o-u))**3*fd.dx
+		obj -= obj_ocean
 
 	return obj
         
