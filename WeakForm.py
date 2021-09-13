@@ -32,15 +32,15 @@ def objective(u, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o, rho_o, v_o,
 #=======================================
 # Linearization
 #=======================================
-def update_va(mx, my, t, X, v_a):
+def update_va(mx, my, t, X, v_a, T, L):
 	a = 72./180*np.pi
-	vmax = 15 #m/s
-	mx.assign(256*1000+128*1000*t)
-	my.assign(256*1000+128*1000*t)
+	vmax = 15*T/L #m/s
+	mx.assign(256*1000/L+128*1000*t*T/L)
+	my.assign(256*1000/L+128*1000*t*T/L)
 	r = fd.sqrt((mx - X[0])**2 + (my - X[1])**2) 
-	s = 1/50*fd.exp(-r/100/1000)
+	s = 1/50*fd.exp(-r/(100*1000)*L)
 	v_a.interpolate(fd.as_vector([-s*vmax*( fd.cos(a)*(X[0]-mx) + fd.sin(a)*(X[1]-my)), 
-                                  -s*vmax*(-fd.sin(a)*(X[0]-mx) + fd.cos(a)*(X[1]-my))]))
+	                              -s*vmax*(-fd.sin(a)*(X[0]-mx) + fd.cos(a)*(X[1]-my))]))
 
 def tau_atm(C_a, rho_a, v_a):
 	return C_a*rho_a*fd.sqrt(fd.inner(v_a, v_a))*v_a

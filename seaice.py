@@ -40,15 +40,18 @@ NL_SOLVER_MAXITER = 10
 NL_SOLVER_STEP_MAXITER = 15
 NL_SOLVER_STEP_ARMIJO    = 1.0e-4
 
+## Scaling
+T = 1e3/60/24 # 1e3 second
+L = 1e3       # 1e3 m
+G = 1         # 1 m
 
 ## Domain: (0,1)x(0,1)
 dim = 2
-L = 512*1000 # 512km
 Nx = Ny = 128
-Lx = Ly = L
+Lx = Ly = 512*1000/L
 mesh = RectangleMesh(Nx, Ny, Lx, Ly)
 
-Tfinal = 2 #days
+Tfinal = 2/T #days
 delta_t = 0.02 # 30 min.
 
 ## Discretization: 
@@ -67,19 +70,19 @@ H = FunctionSpace(mesh, Helt)
 
 ## Parameteres
 # fc: Coriolis
-fc = 1.46e-4 #s^{-1}
+fc = 1.46e-4*T #s^{-1}
 # air drag coeff.
-Ca = 1.2e-3 
+Ca = 1.2e-3*L/G 
 # water drag coeff.
-Cw = 5.5e-3
+Co = 5.5e-3*L/G
 # air density
 rhoa = 1.3 #kg/m^3 
-rhow = 1026 #kg/m^3
+rhoo = 1026 #kg/m^3
 rhoice = 900 #kg/m^3
 # ice strength 
-Pstar = 27.5e3
+Pstar = 27.5e3*T**2/L**2
 #other
-delta_min = 2e-9
+delta_min = 2e-9*T
 
 # solution vector
 sol_u      = Function(V)
@@ -105,21 +108,18 @@ sol_uprevt.assign(sol_u)
 sol_A.project(Constant(1.0))
 # H_0
 X = SpatialCoordinate(mesh)
-sol_H.interpolate(0.3 + 0.005*(sin(60*X[0]/1000/1000) + sin(30*X[1]/1000/1000)))
+sol_H.interpolate((0.3/L + 0.005/L*(sin(60*X[0]/1e6*L) + sin(30*X[1]/1e6*L)))/G)
 
 # v_ocean
-v_ocean_max = 0.01 #m/s
-v_ocean.interpolate(as_vector([v_ocean_max*(2*X[1]-L)/L,-v_ocean_max*(2*X[0]-L)/L]))
+v_ocean_max = 0.01*T/L #m/s
+v_ocean.interpolate(as_vector([v_ocean_max*(2*X[1]-Lx)/Lx,-v_ocean_max*(2*X[0]-Ly)/Ly]))
 er_x_vo = as_vector([-v_ocean[1], v_ocean[0]])
 
 # v_a
-a = 72./180*pi
-vmax = 15 #m/s
 t = 0.0
-mx = Constant(256*1000)
-my = Constant(256*1000)
-
-WeakForm.update_va(mx, my, 0.0, X, v_a)
+mx = Constant(0.0)
+my = Constant(0.0)
+WeakForm.update_va(mx, my, 0.0, X, v_a, T, L)
 
 # visualize initial value
 File("v_ocean.pvd").write(v_ocean)
@@ -132,14 +132,14 @@ File("H.pvd").write(sol_H)
 ## Weak Form
 # set weak forms of objective functional and gradient
 obj  = WeakForm.gradient(sol_u, sol_uprevt, sol_A, sol_H, V, rhoice, delta_t, Ca, rhoa, v_a, \
-                         Cw, rhow, v_ocean, delta_min, Pstar, fc)
+                         Co, rhoo, v_ocean, delta_min, Pstar, fc)
 grad = WeakForm.gradient(sol_u, sol_uprevt, sol_A, sol_H, V, rhoice, delta_t, Ca, rhoa, v_a, \
-                         Cw, rhow, v_ocean, delta_min, Pstar, fc)
+                         Co, rhoo, v_ocean, delta_min, Pstar, fc)
 
 # set weak form of Hessian and forms related to the linearization
 if args.linearization == 'stdnewton':
     hess = WeakForm.hessian_NewtonStandard(sol_u, sol_A, sol_H, V, rhoice, \
-               delta_t, Ca, rhoa, v_a, Cw, rhow, v_ocean, delta_min, Pstar, fc)
+               delta_t, Ca, rhoa, v_a, Co, rhoo, v_ocean, delta_min, Pstar, fc)
 elif args.linearization == 'stressvel':
     if Vd is None:
         raise ValueError("stressvel not implemented for discretisation %s" \
@@ -152,7 +152,7 @@ elif args.linearization == 'stressvel':
     dualStep = WeakForm.hessian_dualStep(sol_u, step_u, S, Vd, delta_min)
     dualres = WeakForm.dualresidual(S, sol_u, Vd, delta_min)
     hess = WeakForm.hessian_NewtonStressvel(sol_u, S, sol_A, sol_H, V, rhoice, \
-               delta_t, Ca, rhoa, v_a, Cw, rhow, v_ocean, delta_min, Pstar, fc)
+               delta_t, Ca, rhoa, v_a, Co, rhoo, v_ocean, delta_min, Pstar, fc)
 else:
     raise ValueError("unknown type of linearization %s" % args.linearization)
 
