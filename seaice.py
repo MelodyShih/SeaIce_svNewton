@@ -35,8 +35,8 @@ args, _ = parser.parse_known_args()
 MONITOR_NL_ITER = True
 MONITOR_NL_STEPSEARCH = False
 NL_SOLVER_GRAD_RTOL = 1e-8
-NL_SOLVER_GRAD_STEP_RTOL = 1e-8
-NL_SOLVER_MAXITER = 10
+NL_SOLVER_GRAD_STEP_RTOL = 1e-16
+NL_SOLVER_MAXITER = 100
 NL_SOLVER_STEP_MAXITER = 15
 NL_SOLVER_STEP_ARMIJO    = 1.0e-4
 
@@ -131,7 +131,7 @@ File("H.pvd").write(sol_H)
 
 ## Weak Form
 # set weak forms of objective functional and gradient
-obj  = WeakForm.gradient(sol_u, sol_uprevt, sol_A, sol_H, V, rhoice, delta_t, Ca, rhoa, v_a, \
+obj  = WeakForm.objective(sol_u, sol_uprevt, sol_A, sol_H, V, rhoice, delta_t, Ca, rhoa, v_a, \
                          Co, rhoo, v_ocean, delta_min, Pstar, fc)
 grad = WeakForm.gradient(sol_u, sol_uprevt, sol_A, sol_H, V, rhoice, delta_t, Ca, rhoa, v_a, \
                          Co, rhoo, v_ocean, delta_min, Pstar, fc)
@@ -164,7 +164,7 @@ angle_grad_step_init = angle_grad_step = np.nan
 # initialize solver statistics
 lin_it       = 0
 lin_it_total = 0
-obj_val      = norm(assemble(obj))
+obj_val      = assemble(obj)
 step_length  = 0.0
 
 if args.linearization == 'stressvel':
@@ -183,7 +183,7 @@ for itn in range(NL_SOLVER_MAXITER+1):
 
     # stop if converged
     if g_norm < NL_SOLVER_GRAD_RTOL*g_norm_init:
-        PETSc.Sys.Print("Stop reason: Converged to rtol; ||g|| reduction %3e." % g_norm/g_norm_init)
+        PETSc.Sys.Print("Stop reason: Converged to rtol; ||g|| reduction %3e." % float(g_norm/g_norm_init))
         break
     if np.abs(angle_grad_step) < NL_SOLVER_GRAD_STEP_RTOL*np.abs(angle_grad_step_init):
         PETSc.Sys.Print("Stop reason: Converged to rtol; (grad,step) reduction %3e." % \
@@ -237,7 +237,7 @@ for itn in range(NL_SOLVER_MAXITER+1):
     # run backtracking line search
     for j in range(NL_SOLVER_STEP_MAXITER):
         sol_u.vector().axpy(-step_length, step_u.vector())
-        obj_val_next = norm(assemble(obj))
+        obj_val_next = assemble(obj)
         if MONITOR_NL_STEPSEARCH and 0 < j:
            PETSc.Sys.Print("Step search: {0:>2d}{1:>10f}{2:>20.12e}{3:>20.12e}".format(
                  j, step_length, obj_val_next, obj_val))

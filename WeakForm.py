@@ -13,25 +13,6 @@ import numpy as np
 import math
 import sys
 
-#=======================================
-# Objective 
-#=======================================
-def objective(u, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o, rho_o, v_o, 
-             delta_min, Pstar, f_c):
-	'''
-	Creates the weak form for the objective functional:
-	
-	    \int viscmin*(grad_s u,grad_s u) + Phi(eII(u)) - p*div(u) - (f,u)
-	
-	where
-	    eII(u) = sqrt of the 2nd invariant of the strain rate (of u)
-	    viscmin = viscosity_min
-	'''
-	return 0
-        
-#=======================================
-# Linearization
-#=======================================
 def update_va(mx, my, t, X, v_a, T, L):
 	a = 72./180*np.pi
 	vmax = 15*T/L #m/s
@@ -57,8 +38,8 @@ def tau(u):
 #=======================================
 # Objective 
 #=======================================
-def objective(u, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o, rho_o, v_o, 
-             delta_min, Pstar, f_c):
+def objective(u, uprev, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o, 
+              rho_o, v_o, delta_min, Pstar, f_c):
 	'''
 	Creates the weak form for the objective functional:
 	
@@ -67,8 +48,21 @@ def objective(u, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o, rho_o, v_o,
 	tau_u   = tau(u)
 	delta  = fd.sqrt(delta_min**2+2*fd.inner(tau_u,tau_u))
 	P  = Pstar*H*fd.exp(-20*(1.0-A))
-	obj = delta_t* P/2*delta*fd.dx 
-	return 0
+	obj_divsigma = delta_t* P/2*delta*fd.dx 
+
+	#obj_ocean = 1./3*C_o*rho_o*fd.sqrt(fd.inner(v_o-u, v_o-u))**3
+	obj_rhoHu = 0.5*rho_i*H*fd.inner(u, u)*fd.dx
+
+	tau_a = tau_atm(C_a, rho_a, v_a)
+	tau_o = tau_ocean(C_o, rho_o, u, v_o)
+	#er_x_vo = fd.as_vector([-v_o[1], v_o[0]])
+
+	obj_F =   rho_i*H*fd.inner(uprev, u)*fd.dx\
+	        + delta_t*fd.inner(tau_a, u)*fd.dx#\
+	        #+ delta_t*f_c*fd.inner(er_x_vo, u)*fd.dx 
+	obj = obj_rhoHu + obj_divsigma #+ obj_ocean
+	obj-= obj_F
+	return obj
         
 #=======================================
 # Linearization
@@ -103,14 +97,14 @@ def gradient(u, uprev, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o, rho_o,
 
 	P  = Pstar*H*fd.exp(-20*(1.0-A))
 	F  = rho_i*H*fd.inner(uprev, ute)*fd.dx + \
-	     delta_t*fd.inner(tau_a, ute)*fd.dx\
+	     delta_t*fd.inner(tau_a, ute)*fd.dx#\
 	     #+ delta_t*rho_i*H*f_c*fd.inner(er_x_vo, ute)*fd.dx 
 
 	AA = rho_i*H*fd.inner(u, ute)*fd.dx\
 	     + delta_t*P/fd.sqrt(delta_min**2 + 2*fd.inner(tau_u, tau_u))*fd.inner(tau_u, tau_ute)*fd.dx\
 	     - delta_t*P*fd.tr(Ete)*fd.dx#\
 	     #- delta_t*fd.inner(tau_o, ute)*fd.dx #\
-	     #+ delta_t*rho_i*H*f_c*fd.inner(er_x_u , ute)*fd.dx +\
+	     #+ delta_t*rho_i*H*f_c*fd.inner(er_x_u , ute)*fd.dx
 	grad = AA - F
 
 	return grad
