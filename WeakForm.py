@@ -49,19 +49,21 @@ def objective(u, uprev, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o,
 	delta  = fd.sqrt(delta_min**2+2*fd.inner(tau_u,tau_u))
 	P  = Pstar*H*fd.exp(-20*(1.0-A))
 	obj_divsigma = delta_t* P/2*delta*fd.dx 
-
-	#obj_ocean = 1./3*C_o*rho_o*fd.sqrt(fd.inner(v_o-u, v_o-u))**3
 	obj_rhoHu = 0.5*rho_i*H*fd.inner(u, u)*fd.dx
 
 	tau_a = tau_atm(C_a, rho_a, v_a)
 	tau_o = tau_ocean(C_o, rho_o, u, v_o)
 	#er_x_vo = fd.as_vector([-v_o[1], v_o[0]])
-
 	obj_F =   rho_i*H*fd.inner(uprev, u)*fd.dx\
 	        + delta_t*fd.inner(tau_a, u)*fd.dx#\
 	        #+ delta_t*f_c*fd.inner(er_x_vo, u)*fd.dx 
-	obj = obj_rhoHu + obj_divsigma #+ obj_ocean
-	obj-= obj_F
+
+	obj = obj_rhoHu + obj_divsigma - obj_F
+
+	if (abs(C_o)>1e-15):
+		obj_ocean = 1./3*C_o*rho_o*fd.sqrt(fd.inner(v_o-u, v_o-u))**3*fd.dx
+		obj += obj_ocean
+
 	return obj
         
 #=======================================
@@ -103,8 +105,11 @@ def gradient(u, uprev, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o, rho_o,
 	AA = rho_i*H*fd.inner(u, ute)*fd.dx\
 	     + delta_t*P/fd.sqrt(delta_min**2 + 2*fd.inner(tau_u, tau_u))*fd.inner(tau_u, tau_ute)*fd.dx\
 	     - delta_t*P*fd.tr(Ete)*fd.dx#\
-	     #- delta_t*fd.inner(tau_o, ute)*fd.dx #\
 	     #+ delta_t*rho_i*H*f_c*fd.inner(er_x_u , ute)*fd.dx
+
+	if (abs(C_o) > 1e-15):
+		AA += - delta_t*fd.inner(tau_o, ute)*fd.dx	
+
 	grad = AA - F
 
 	return grad
@@ -133,15 +138,17 @@ def hessian_NewtonStandard(u, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o,
 	tau_ute = tau(ute)
 	tau_utr = tau(utr) 
 	delta  = fd.sqrt(delta_min**2+2*fd.inner(tau_u,tau_u))
-	dtaudu = tau(utr) 
-	dsigmadu =   P/delta*fd.inner(dtaudu,tau_ute)*fd.dx + \
+	dsigmadu =   P/delta*fd.inner(tau_utr,tau_ute)*fd.dx + \
                -(P/delta**3)*2*fd.inner(tau_u,tau_utr)*fd.inner(tau_u,tau_ute)*fd.dx 
 
-	## dtau_ocean/du
-	#dtauodu = -rho_o*C_o*fd.sqrt(fd.inner(v_o-u, v_o-u))*fd.inner(utr,ute)*fd.dx + \
-	#          -rho_o*C_o/fd.sqrt(fd.inner(v_o-u, v_o-u))*fd.inner(v_o-u,utr)*fd.inner(v_o-u,ute)*fd.dx
+	hess += delta_t*dsigmadu
 
-	hess += delta_t*dsigmadu #- delta_t*dtauodu
+	# dtau_ocean/du
+	if (abs(C_o) > 1e-15):
+		dtauodu = -rho_o*C_o*fd.sqrt(fd.inner(v_o-u, v_o-u))*fd.inner(utr,ute)*fd.dx + \
+	    	      -rho_o*C_o/fd.sqrt(fd.inner(v_o-u, v_o-u))*fd.inner(v_o-u,utr)*fd.inner(v_o-u,ute)*fd.dx
+		hess += delta_t*dtauodu
+
            
 	return hess
 
@@ -166,15 +173,17 @@ def hessian_NewtonStressvel(u, S, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, 
 	tau_ute = tau(ute)
 	tau_utr = tau(utr) 
 	delta = fd.sqrt(delta_min**2+2*fd.inner(tau_u,tau_u))
-	dtaudu = tau(utr) 
-	dsigmadu =   P/delta*fd.inner(dtaudu,tau_ute)*fd.dx + \
+	dsigmadu =         P/delta*fd.inner(tau_utr,tau_ute)*fd.dx\
                -(P/delta**2)*2*fd.inner(tau_u,tau_utr)*fd.inner(S,tau_ute)*fd.dx 
+               #-(P/delta**2)*2*(fd.inner(tau_u,tau_utr)*fd.inner(S,tau_ute) + fd.inner(S,tau_utr)*fd.inner(tau_u,tau_ute))*fd.dx 
 
-	## dtau_ocean/du
-	dtauodu = -rho_o*C_o*fd.sqrt(fd.inner(v_o-u, v_o-u))*fd.inner(utr,ute)*fd.dx + \
-	          -rho_o*C_o/fd.sqrt(fd.inner(v_o-u, v_o-u))*fd.inner(v_o-u,utr)*fd.inner(v_o-u,ute)*fd.dx
+	hess += delta_t*dsigmadu
 
-	hess += delta_t*dsigmadu - delta_t*dtauodu
+	# dtau_ocean/du
+	if (abs(C_o) > 1e-15):
+		dtauodu = -rho_o*C_o*fd.sqrt(fd.inner(v_o-u, v_o-u))*fd.inner(utr,ute)*fd.dx + \
+	    	      -rho_o*C_o/fd.sqrt(fd.inner(v_o-u, v_o-u))*fd.inner(v_o-u,utr)*fd.inner(v_o-u,ute)*fd.dx
+		hess += delta_t*dtauodu
            
 	return hess
 
@@ -186,21 +195,21 @@ def hessian_dualStep(u, ustep, S, DualFncSp, delta_min):
 
 	tau_u     = tau(u)
 	tau_ustep = tau(ustep)
-	delta    = fd.sqrt(delta_min**2+2*fd.inner(tau_u,tau_u))
-	delta_sq = delta_min**2+2*fd.inner(tau_u,tau_u)
-	S_step = -fd.inner(S,Ste)*fd.dx - \
-             2.0/delta_sq*fd.inner(tau_ustep, tau_u)*fd.inner(S,Ste)*fd.dx +\
-             1.0/delta*fd.inner(tau_ustep+tau_u, Ste)*fd.dx
+	delta     = fd.sqrt(delta_min**2+2*fd.inner(tau_u,tau_u))
+	delta_sq  = delta_min**2+2*fd.inner(tau_u,tau_u)
+	S_step    = - fd.inner(S,Ste)*fd.dx\
+                - 2.0/delta_sq*fd.inner(tau_ustep, tau_u)*fd.inner(S,Ste)*fd.dx\
+                + 1.0/delta*fd.inner(tau_ustep+tau_u, Ste)*fd.dx
 	return S_step
 
 def dualresidual(S, u, DualFncSp, delta_min):
 	'''
 	Creates the weak form for residual of dual variable 
 	'''
-	Ste = fd.TestFunction(DualFncSp)
-	tau_u   = tau(u)
+	Ste   = fd.TestFunction(DualFncSp)
+	tau_u = tau(u)
 	delta = fd.sqrt(delta_min**2+2*fd.inner(tau_u,tau_u))
-	res = delta*fd.inner(S, Ste)*fd.dx - fd.inner(tau_u, Ste)*fd.dx
+	res   = delta*fd.inner(S, Ste)*fd.dx - fd.inner(tau_u, Ste)*fd.dx
 	return res
 
 def hessian_dualUpdate_boundMaxMagnitude(S, DualFncSp, max_magn):
