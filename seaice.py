@@ -37,7 +37,7 @@ MONITOR_NL_STEPSEARCH = False
 NL_SOLVER_GRAD_RTOL = 1e-8
 NL_SOLVER_GRAD_STEP_RTOL = 1e-8
 NL_SOLVER_MAXITER = 10
-NL_SOLVER_STEP_MAXITER = 5
+NL_SOLVER_STEP_MAXITER = 15
 NL_SOLVER_STEP_ARMIJO    = 1.0e-4
 
 
@@ -84,6 +84,7 @@ delta_min = 2e-9
 # solution vector
 sol_u      = Function(V)
 sol_uprev  = Function(V)
+sol_uprevt = Function(V)
 step_u     = Function(V)
 sol_A      = Function(A)
 sol_H      = Function(H)
@@ -99,6 +100,7 @@ bcstep_u = [DirichletBC(V, Constant((0.,)*dim), "on_boundary")]
 ## Initialization
 # v_0 = 0.0
 sol_u.project(Constant((0.,)*dim))
+sol_uprevt.assign(sol_u)
 # A_0 = 1.0
 sol_A.project(Constant(1.0))
 # H_0
@@ -129,9 +131,9 @@ File("H.pvd").write(sol_H)
 
 ## Weak Form
 # set weak forms of objective functional and gradient
-obj  = WeakForm.gradient(sol_u, sol_A, sol_H, V, rhoice, delta_t, Ca, rhoa, v_a, \
+obj  = WeakForm.gradient(sol_u, sol_uprevt, sol_A, sol_H, V, rhoice, delta_t, Ca, rhoa, v_a, \
                          Cw, rhow, v_ocean, delta_min, Pstar, fc)
-grad = WeakForm.gradient(sol_u, sol_A, sol_H, V, rhoice, delta_t, Ca, rhoa, v_a, \
+grad = WeakForm.gradient(sol_u, sol_uprevt, sol_A, sol_H, V, rhoice, delta_t, Ca, rhoa, v_a, \
                          Cw, rhow, v_ocean, delta_min, Pstar, fc)
 
 # set weak form of Hessian and forms related to the linearization

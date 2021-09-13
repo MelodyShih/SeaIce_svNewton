@@ -54,7 +54,7 @@ def tau(u):
 	I = fd.Identity(2)
 	return 1./e*fd.dev(E) + 0.5*fd.tr(E)*I
 
-def gradient(u, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o, rho_o, v_o, 
+def gradient(u, uprev, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o, rho_o, v_o, 
              delta_min, Pstar, f_c):
 	'''
 	Creates the weak form for the gradient:
@@ -82,13 +82,15 @@ def gradient(u, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o, rho_o, v_o,
 	Ete = fd.sym(fd.nabla_grad(ute))
 
 	P  = Pstar*H*fd.exp(-20*(1.0-A))
-	F  = delta_t*fd.inner(tau_a, ute)*fd.dx + \
-	 	 delta_t*rho_i*H*f_c*fd.inner(er_x_vo, ute)*fd.dx 
+	F  = rho_i*H*fd.inner(uprev, ute)*fd.dx + \
+	     delta_t*fd.inner(tau_a, ute)*fd.dx + \
+	     delta_t*rho_i*H*f_c*fd.inner(er_x_vo, ute)*fd.dx 
 
-	AA = delta_t*rho_i*H*f_c*fd.inner(er_x_u , ute)*fd.dx +\
+	AA = rho_i*H*fd.inner(u, ute)*fd.dx + \
+	     delta_t*rho_i*H*f_c*fd.inner(er_x_u , ute)*fd.dx +\
 	     delta_t*P/fd.sqrt(delta_min**2 + 2*fd.inner(tau_u, tau_u))*fd.inner(tau_u, tau_ute)*fd.dx\
-         - delta_t*P*fd.tr(Ete)*fd.dx\
-         - delta_t*fd.inner(tau_o, ute)*fd.dx
+	     - delta_t*P*fd.tr(Ete)*fd.dx\
+	     - delta_t*fd.inner(tau_o, ute)*fd.dx
 	grad = F-AA
 
 	return grad
