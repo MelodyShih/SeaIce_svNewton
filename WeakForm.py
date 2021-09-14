@@ -35,6 +35,23 @@ def tau(u):
 	I = fd.Identity(2)
 	return 1./e*fd.dev(E) + 0.5*fd.tr(E)*I
 
+def applyBoundaryConditions(u, boundary_condition, boundary_condition_type=None):
+    assert boundary_condition is not None or boundary_condition_type is not None
+
+    # apply given boundary conditions
+    if boundary_condition is not None:
+        if isinstance(boundary_condition, fd.DirichletBC):
+            boundary_condition.apply(u.vector())
+        else:
+            for bc in boundary_condition:
+                bc.apply(u.vector())
+        return
+
+    # create and apply boundary conditions
+    if boundary_condition_type is not None:
+        bc = createBoundaryConditions(boundary_condition_type, u.function_space())
+        applyBoundaryConditions(u, bc)
+
 #=======================================
 # Objective 
 #=======================================
@@ -53,15 +70,13 @@ def objective(u, uprev, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o,
 
 	tau_a = tau_atm(C_a, rho_a, v_a)
 	tau_o = tau_ocean(C_o, rho_o, u, v_o)
-	#er_x_vo = fd.as_vector([-v_o[1], v_o[0]])
 	obj_F =   rho_i*H*fd.inner(uprev, u)*fd.dx\
-	        + delta_t*fd.inner(tau_a, u)*fd.dx#\
-	        #+ delta_t*f_c*fd.inner(er_x_vo, u)*fd.dx 
+	        + delta_t*fd.inner(tau_a, u)*fd.dx
 
 	obj = obj_rhoHu + obj_divsigma - obj_F
 
 	if (abs(C_o)>1e-15):
-		obj_ocean = delta_t*-1./3*C_o*rho_o*fd.sqrt(fd.inner(v_o-u, v_o-u))**3*fd.dx
+		obj_ocean = delta_t*(-1./3)*C_o*rho_o*fd.sqrt(fd.inner(v_o-u, v_o-u))**3*fd.dx
 		obj -= obj_ocean
 
 	return obj

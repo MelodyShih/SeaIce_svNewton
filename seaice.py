@@ -1,6 +1,8 @@
 from firedrake import *
 import WeakForm
 import Abstract.Vector
+import Abstract.WeakForm
+import Abstract.CheckDerivatives
 
 PETSc.Sys.popErrorHandler()
 ##################################################
@@ -32,20 +34,21 @@ args, _ = parser.parse_known_args()
 
 #======================================
 ## nolinear solver parameters
+NL_CHECK_GRADIENT = False
 MONITOR_NL_ITER = True
 MONITOR_NL_STEPSEARCH = False
 NL_SOLVER_GRAD_RTOL = 1e-8
 NL_SOLVER_GRAD_STEP_RTOL = 1e-8
-NL_SOLVER_MAXITER = 50
+NL_SOLVER_MAXITER = 10
 NL_SOLVER_STEP_MAXITER = 15
-NL_SOLVER_STEP_ARMIJO    = 1.0e-4
+NL_SOLVER_STEP_ARMIJO = 1.0e-4
 
 ## Output
 OUTPUT_VTK = True
 
 ## Scaling
 T = 1e3/60/24 # 1e3 second
-L = 1e2       # 1e3 m
+L = 5e2       # 1e3 m
 G = 1         # 1 m
 
 ## Domain: (0,1)x(0,1)
@@ -73,7 +76,7 @@ H = FunctionSpace(mesh, Helt)
 
 ## Parameteres
 # fc: Coriolis
-fc = 1.46e-4*T #s^{-1}
+fc = 0.0 #1.46e-4*T #s^{-1}
 # air drag coeff.
 Ca = 1.2e-3*L/G 
 # water drag coeff.
@@ -223,6 +226,29 @@ for itn in range(NL_SOLVER_MAXITER+1):
     # compute the norm of the gradient
     g = assemble(grad, bcs=bcstep_u)
     g_norm = norm(g)
+
+    # check derivatives
+    if NL_CHECK_GRADIENT:
+        perturb_u       = Function(V)
+        perturb_uscaled = Function(V)
+
+        randrhs = Function(V)
+        Abstract.Vector.setZero(randrhs)
+        Abstract.Vector.addNoiseRandUniform(randrhs)
+
+        # create random direction and apply the right bcs
+        Abstract.Vector.setZero(perturb_u)
+        Abstract.Vector.addNoiseRandUniform(perturb_u)
+        WeakForm.applyBoundaryConditions(perturb_u, bcstep_u)
+
+        # scale the direction so that perturb and sol have similar scale
+        p = LinearVariationalProblem(Abstract.WeakForm.mass(V),
+                                     Abstract.WeakForm.magnitude_scale(sol_u, perturb_u, V),
+                                     perturb_uscaled, bcs=bcstep_u)
+        s = LinearVariationalSolver(p, options_prefix="gradcheck_")
+        s.solve()
+        Abstract.CheckDerivatives.gradient(g.vector(), obj, sol_u, obj_perturb=perturb_uscaled, \
+                grad_perturb=perturb_uscaled, n_checks=8)
 
     # compute angle between step and (negative) gradient
     angle_grad_step = -step_u.vector().inner(g)
