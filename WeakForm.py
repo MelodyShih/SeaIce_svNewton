@@ -55,7 +55,7 @@ def applyBoundaryConditions(u, boundary_condition, boundary_condition_type=None)
 #=======================================
 # Objective 
 #=======================================
-def objective(u, uprev, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o, 
+def objective(u, uprev, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o, 
               rho_o, v_o, delta_min, Pstar, f_c):
 	'''
 	Creates the weak form for the objective functional:
@@ -65,18 +65,18 @@ def objective(u, uprev, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o,
 	tau_u   = tau(u)
 	delta  = fd.sqrt(delta_min**2+2*fd.inner(tau_u,tau_u))
 	P  = Pstar*H*fd.exp(-20*(1.0-A))
-	obj_divsigma = delta_t* P/2*delta*fd.dx 
+	obj_divsigma = dt* P/2*delta*fd.dx 
 	obj_rhoHu = 0.5*rho_i*H*fd.inner(u, u)*fd.dx
 
 	tau_a = tau_atm(C_a, rho_a, v_a)
 	tau_o = tau_ocean(C_o, rho_o, u, v_o)
 	obj_F =   rho_i*H*fd.inner(uprev, u)*fd.dx\
-	        + delta_t*fd.inner(tau_a, u)*fd.dx
+	        + dt*fd.inner(tau_a, u)*fd.dx
 
 	obj = obj_rhoHu + obj_divsigma - obj_F
 
 	if (abs(C_o)>1e-15):
-		obj_ocean = delta_t*(-1./3)*C_o*rho_o*fd.sqrt(fd.inner(v_o-u, v_o-u))**3*fd.dx
+		obj_ocean = dt*(-1./3)*C_o*rho_o*fd.sqrt(fd.inner(v_o-u, v_o-u))**3*fd.dx
 		obj -= obj_ocean
 
 	return obj
@@ -85,18 +85,18 @@ def objective(u, uprev, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o,
 # Linearization
 #=======================================
 
-def gradient(u, uprev, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o, rho_o, v_o, 
+def gradient(u, uprev, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o, rho_o, v_o, 
              delta_min, Pstar, f_c):
 	'''
 	Creates the weak form for the gradient:
 	
 	    F(ute) - A(u, ute) = 
-	    \int rho_ice*H_n*uprev*ute + delta_t*tau_atm(t_n)*ute + 
-	                               + delta_t*rho_ice*H_n*h_c*(e_r x v_ocean)*ute
+	    \int rho_ice*H_n*uprev*ute + dt*tau_atm(t_n)*ute + 
+	                               + dt*rho_ice*H_n*h_c*(e_r x v_ocean)*ute
 	    - 
-	    \int rho_ice*H_n*u*ute + delta_t*rho_ice*H_n*f_c*(e_r x u)*ute
-	                           + delta_t*sigma_n(A_n,H_n,u)*grad(ute)
-	                           - delta_t*tau_ocean(t_n, u)*ute
+	    \int rho_ice*H_n*u*ute + dt*rho_ice*H_n*f_c*(e_r x u)*ute
+	                           + dt*sigma_n(A_n,H_n,u)*grad(ute)
+	                           - dt*tau_ocean(t_n, u)*ute
 	where
 	    ute = u_test = TestFunction of the velocity space
 	'''
@@ -114,27 +114,27 @@ def gradient(u, uprev, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o, rho_o,
 
 	P  = Pstar*H*fd.exp(-20*(1.0-A))
 	F  = rho_i*H*fd.inner(uprev, ute)*fd.dx + \
-	     delta_t*fd.inner(tau_a, ute)*fd.dx
+	     dt*fd.inner(tau_a, ute)*fd.dx
 
 
 	AA = rho_i*H*fd.inner(u, ute)*fd.dx\
-	     + delta_t*P/fd.sqrt(delta_min**2 + 2*fd.inner(tau_u, tau_u))*fd.inner(tau_u, tau_ute)*fd.dx\
-	     - delta_t*P*fd.tr(Ete)*fd.dx
+	     + dt*P/fd.sqrt(delta_min**2 + 2*fd.inner(tau_u, tau_u))*fd.inner(tau_u, tau_ute)*fd.dx\
+	     - dt*P*fd.tr(Ete)*fd.dx
 
 	if (abs(C_o) > 1e-15):
-		AA += - delta_t*fd.inner(tau_o, ute)*fd.dx	
+		AA += - dt*fd.inner(tau_o, ute)*fd.dx	
 
 	# Coriolis:
 	if (abs(f_c) > 1e-15):
-	    F += delta_t*rho_i*H*f_c*fd.inner(er_x_vo, ute)*fd.dx 
-	    AA += delta_t*rho_i*H*f_c*fd.inner(er_x_u , ute)*fd.dx
+	    F += dt*rho_i*H*f_c*fd.inner(er_x_vo, ute)*fd.dx 
+	    AA += dt*rho_i*H*f_c*fd.inner(er_x_u , ute)*fd.dx
 
 
 	grad = AA - F
 
 	return grad
 
-def hessian_NewtonStandard(u, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o, 
+def hessian_NewtonStandard(u, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o, 
 	                       rho_o, v_o, delta_min, Pstar, f_c):
 	'''
 	Creates the weak form for the Hessian of the standard Newton linearization:
@@ -160,21 +160,21 @@ def hessian_NewtonStandard(u, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o,
 	dsigmadu =         P/delta*fd.inner(tau_utr,tau_ute)*fd.dx + \
 	           -(P/delta**3)*2*fd.inner(tau_u  ,tau_utr)*fd.inner(tau_u,tau_ute)*fd.dx 
 
-	hess += delta_t*dsigmadu
+	hess += dt*dsigmadu
 
 	# dtau_ocean/du
 	if (abs(C_o) > 1e-15):
 		dtauodu = -rho_o*C_o*fd.sqrt(fd.inner(v_o-u, v_o-u))*fd.inner(utr,ute)*fd.dx + \
 	    	      -rho_o*C_o/fd.sqrt(fd.inner(v_o-u, v_o-u))*fd.inner(v_o-u,utr)*fd.inner(v_o-u,ute)*fd.dx
-		hess += delta_t*dtauodu
+		hess += dt*dtauodu
 
 	# Coriolis:
 	if (abs(f_c) > 1e-15):
-	    hess += delta_t*rho_i*H*f_c*fd.inner(er_x_utr,ute)*fd.dx
+	    hess += dt*rho_i*H*f_c*fd.inner(er_x_utr,ute)*fd.dx
            
 	return hess
 
-def hessian_NewtonStressvel(u, S, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, C_o, 
+def hessian_NewtonStressvel(u, S, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o, 
 	                       rho_o, v_o, delta_min, Pstar, f_c):
 	'''
 	Creates the weak form for the Hessian of the stress-vel Newton linearization:
@@ -197,13 +197,13 @@ def hessian_NewtonStressvel(u, S, A, H, FncSp, rho_i, delta_t, C_a, rho_a, v_a, 
 	dsigmadu =         P/delta*fd.inner(tau_utr,tau_ute)*fd.dx\
 	           -(P/delta**2)*2*fd.inner(tau_u  ,tau_utr)*fd.inner(S,tau_ute)*fd.dx 
 
-	hess += delta_t*dsigmadu
+	hess += dt*dsigmadu
 
 	# dtau_ocean/du
 	if (abs(C_o) > 1e-15):
 		dtauodu = -rho_o*C_o*fd.sqrt(fd.inner(v_o-u, v_o-u))*fd.inner(utr,ute)*fd.dx + \
 	    	      -rho_o*C_o/fd.sqrt(fd.inner(v_o-u, v_o-u))*fd.inner(v_o-u,utr)*fd.inner(v_o-u,ute)*fd.dx
-		hess += delta_t*dtauodu
+		hess += dt*dtauodu
 
 	# Coriolis:
 	if (abs(f_c) > 1e-15):
