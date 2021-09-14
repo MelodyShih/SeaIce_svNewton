@@ -209,6 +209,7 @@ solvH3 = LinearVariationalSolver(probH3)
 
 while t < Tfinal - 0.5*dt and ntstep < 10:
     WeakForm.update_va(mx, my, t, X, v_a, T, L)
+    sol_uprevt.assign(sol_u)
 
     ### Advance A, H
     solvA1.solve()
@@ -248,7 +249,7 @@ while t < Tfinal - 0.5*dt and ntstep < 10:
         PETSc.Sys.Print('{0:<3} "{1:>6}"{2:^20}{3:^14}{4:^15}{5:^10}'.format(
               "Itn", "default", "Energy", "||g||_l2", 
                "(grad,step)", "step len"))
-    
+
     for itn in range(NL_SOLVER_MAXITER+1):
         # print iteration line
         if MONITOR_NL_ITER:
