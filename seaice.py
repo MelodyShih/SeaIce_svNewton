@@ -1,4 +1,5 @@
 from firedrake import *
+import math
 import WeakForm
 import Abstract.Vector
 import Abstract.WeakForm
@@ -34,7 +35,7 @@ args, _ = parser.parse_known_args()
 
 #======================================
 ## nolinear solver parameters
-NL_CHECK_GRADIENT = False
+NL_CHECK_GRADIENT = True
 MONITOR_NL_ITER = True
 MONITOR_NL_STEPSEARCH = False
 NL_SOLVER_GRAD_RTOL = 1e-8
@@ -47,10 +48,11 @@ NL_SOLVER_STEP_ARMIJO = 1.0e-4
 OUTPUT_VTK = True
 outfile_A = File("vtk/sol_A_ts.pvd")
 outfile_H = File("vtk/sol_H_ts.pvd")
+outfile_u = File("vtk/sol_u_ts.pvd")
 
 ## Scaling
-T = 1e3/60/24 # 1e3 second
-L = 5e2       # 1e3 m
+T = 1e3       # 1e3 second
+L = 1e3       # 1e3 m
 G = 1         # 1 m
 
 ## Domain: (0,1)x(0,1)
@@ -58,12 +60,15 @@ dim = 2
 Nx = Ny = 128
 Lx = Ly = 512*1000/L
 mesh = RectangleMesh(Nx, Ny, Lx, Ly)
+print("dx", Lx/Nx)
 
-Tfinal = 2/T #2/T #days
-dt = 0.02 # 30 min.
+Tfinal = 2*24*60*60/T #2/T #days
+dt  = 30*60/T/20 # 30 min.
 dtc = Constant(dt)
-t  = 0.0
+t   = 0.0
 ntstep = 0
+print("Tfinal", Tfinal)
+print("dt", dt)
 
 ## Discretization: 
 # v: sea ice velocity (P_k)
@@ -71,8 +76,8 @@ ntstep = 0
 # H: mean sea ice thickness (P_k-2)
 velt  = FiniteElement("CG", mesh.ufl_cell(), 1)
 vdelt = TensorElement("DG", mesh.ufl_cell(), 1)
-Aelt  = FiniteElement("DG", mesh.ufl_cell(), 0)
-Helt  = FiniteElement("DG", mesh.ufl_cell(), 0)
+Aelt  = FiniteElement("DG", mesh.ufl_cell(), 1)
+Helt  = FiniteElement("DG", mesh.ufl_cell(), 1)
 
 V = VectorFunctionSpace(mesh, velt)
 Vd= FunctionSpace(mesh, vdelt)
@@ -85,13 +90,13 @@ fc = 0.0 #1.46e-4*T #s^{-1}
 # air drag coeff.
 Ca = 1.2e-3*L/G 
 # water drag coeff.
-Co = 5.5e-3*L/G
+Co = 0.0 #5.5e-3*L/G
 # air density
-rhoa = 1.3 #kg/m^3 
-rhoo = 1026 #kg/m^3
-rhoice = 900 #kg/m^3
+rhoa = 1.3/900.0 #kg/m^3 
+rhoo = 1026.0/900.0 #kg/m^3
+rhoice = 900.0/900.0 #kg/m^3
 # ice strength 
-Pstar = 27.5e3*T**2/L**2
+Pstar = 27.5e3*T**2/L**2/900.0
 #other
 delta_min = 2e-9*T
 
@@ -114,18 +119,24 @@ bc_u     = [DirichletBC(V, Constant((0.,)*dim), "on_boundary")]
 bcstep_u = [DirichletBC(V, Constant((0.,)*dim), "on_boundary")]
 
 ## Initialization
+X = SpatialCoordinate(mesh)
 # v_0 = 0.0
 sol_u.project(Constant((0.,)*dim))
+#sol_u.interpolate(as_vector([(2*X[1]-Lx)/Lx,-(2*X[0]-Ly)/Ly]))
 sol_uprevt.assign(sol_u)
 # A_0 = 1.0
+#bell_r0 = 32; bell_x0 = 256; bell_y0 = 256+96
+#bell = 0.25*(1+cos(math.pi*min_value(sqrt(pow(X[0]-bell_x0, 2) + pow(X[1]-bell_y0, 2))/bell_r0, 1.0)))
+#sol_A.interpolate(1+bell)
 sol_A.project(Constant(1.0))
+
+
 # H_0
-X = SpatialCoordinate(mesh)
 sol_H.interpolate((0.3/L + 0.005/L*(sin(60*X[0]/1e6*L) + sin(30*X[1]/1e6*L)))/G)
 
 # v_ocean
 v_ocean_max = 0.01*T/L #m/s
-print(v_ocean_max)
+print("vo max", v_ocean_max)
 v_ocean.interpolate(as_vector([v_ocean_max*(2*X[1]-Lx)/Lx,-v_ocean_max*(2*X[0]-Ly)/Ly]))
 er_x_vo = as_vector([-v_ocean[1], v_ocean[0]])
 
@@ -171,11 +182,13 @@ Ate = TestFunction(A)
 Atr = TrialFunction(A)
 
 n = FacetNormal(mesh)
-van = 0.5*(dot(v_a, n) + abs(dot(v_a, n)))
+vn = 0.5*(dot(sol_u, n) + abs(dot(sol_u, n)))
 
 a_A = Atr*Ate*dx
-L1 = dtc*(sol_A*inner(v_a, nabla_grad(Ate))*dx
-      - (Ate('+') - Ate('-'))*(van('+')*sol_A('+') - van('-')*sol_A('-'))*dS)
+L1 = dtc*(sol_A*inner(sol_u, nabla_grad(Ate))*dx
+     - conditional(dot(sol_u, n) < 0, Ate*dot(sol_u, n)*1.0, 0.0)*ds
+     - conditional(dot(sol_u, n) > 0, Ate*dot(sol_u, n)*sol_A, 0.0)*ds
+     - (Ate('+') - Ate('-'))*(vn('+')*sol_A('+') - vn('-')*sol_A('-'))*dS)
 
 sol_A1 = Function(A); sol_A2 = Function(A)
 L2 = replace(L1, {sol_A: sol_A1}); L3 = replace(L1, {sol_A: sol_A2})    
@@ -191,11 +204,11 @@ solvA3 = LinearVariationalSolver(probA3)
 Hte = TestFunction(H)
 Htr = TrialFunction(H)
 
-von = 0.5*(dot(v_ocean, n) + abs(dot(v_ocean, n)))
-
 a_H = Htr*Hte*dx
-L1 = dtc*(sol_H*inner(v_a, nabla_grad(Hte))*dx
-      - (Hte('+') - Hte('-'))*(von('+')*sol_H('+') - von('-')*sol_H('-'))*dS)
+L1 = dtc*(sol_H*inner(sol_u, nabla_grad(Hte))*dx
+     - conditional(dot(sol_u, n) < 0, Hte*dot(sol_u, n)*0.3/L, 0.0)*ds
+     - conditional(dot(sol_u, n) > 0, Hte*dot(sol_u, n)*sol_H, 0.0)*ds
+     - (Hte('+') - Hte('-'))*(vn('+')*sol_H('+') - vn('-')*sol_H('-'))*dS)
 
 sol_H1 = Function(H); sol_H2 = Function(H)
 L2 = replace(L1, {sol_H: sol_H1}); L3 = replace(L1, {sol_H: sol_H2})    
@@ -207,9 +220,17 @@ solvH2 = LinearVariationalSolver(probH2)
 probH3 = LinearVariationalProblem(a_H, L3, step_H)
 solvH3 = LinearVariationalSolver(probH3)
 
-while t < Tfinal - 0.5*dt and ntstep < 10:
-    WeakForm.update_va(mx, my, t, X, v_a, T, L)
+while t < Tfinal - 0.5*dt and ntstep < 200:
+    if MONITOR_NL_ITER:
+        PETSc.Sys.Print("[{0:2d}] Time: {1:>5.2e}".format(ntstep, t))
+    #WeakForm.update_va(mx, my, t, X, v_a, T, L)
     sol_uprevt.assign(sol_u)
+
+	## output
+    if ntstep % 1 == 0:
+        outfile_u.write(sol_u, time=t)
+        outfile_A.write(sol_A, time=t)
+        outfile_H.write(sol_H, time=t)
 
     ### Advance A, H
     solvA1.solve()
@@ -229,6 +250,7 @@ while t < Tfinal - 0.5*dt and ntstep < 10:
     
     solvH3.solve()
     sol_H.assign((1.0/3.0)*sol_H + (2.0/3.0)*(sol_H2 + step_H))
+
 
     ### Solve the momentum equation
     # initialize gradient
@@ -257,16 +279,23 @@ while t < Tfinal - 0.5*dt and ntstep < 10:
                   itn, lin_it, obj_val, g_norm, angle_grad_step, step_length))
     
         # stop if converged
+        if g_norm < 1e-10 and itn > 1:
+            nlsolve_success = True
+            PETSc.Sys.Print("Stop reason: ||g|| too small; ||g|| reduction %3e." % float(g_norm/g_norm_init))
+            break
         if g_norm < NL_SOLVER_GRAD_RTOL*g_norm_init:
+            nlsolve_success = True
             PETSc.Sys.Print("Stop reason: Converged to rtol; ||g|| reduction %3e." % float(g_norm/g_norm_init))
             break
         if np.abs(angle_grad_step) < NL_SOLVER_GRAD_STEP_RTOL*np.abs(angle_grad_step_init):
+            nlsolve_success = True
             PETSc.Sys.Print("Stop reason: Converged to rtol; (grad,step) reduction %3e." % \
                   np.abs(angle_grad_step/angle_grad_step_init))
             break
         # stop if step search failed
         if 0 < itn and not step_success:
             PETSc.Sys.Print("Stop reason: Step search reached maximum number of backtracking.")
+            nlsolve_success = False
             break
     
         # set up the linearized system
@@ -348,9 +377,10 @@ while t < Tfinal - 0.5*dt and ntstep < 10:
             step_length *= 0.5
             sol_u.assign(sol_uprev)
         if not step_success:
-            sol_u.vector().axpy(-step_length, step_u.vector())
-            obj_val = obj_val_next
-            step_success = True
+            sol_u.assign(sol_uprev)
+            #sol_u.vector().axpy(-step_length, step_u.vector())
+            #obj_val = obj_val_next
+            #step_success = True
         Abstract.Vector.scale(step_u, -step_length)
     
     PETSc.Sys.Print("%s: #iter %i, ||g|| reduction %3e, (grad,step) reduction %3e, #total linear iter %i." % \
@@ -362,10 +392,10 @@ while t < Tfinal - 0.5*dt and ntstep < 10:
             lin_it_total
         )
     )
-
-	## output
-    outfile_A.write(sol_A, time=t)
-    outfile_H.write(sol_H, time=t)
+    # stop if nonlinear solve failed
+    if not nlsolve_success:
+        PETSc.Sys.Print("[{0:2d}] Failed solving momentum equation".format(ntstep))
+        break
 
     t += dt
     ntstep += 1

@@ -16,8 +16,8 @@ import sys
 def update_va(mx, my, t, X, v_a, T, L):
 	a = 72./180*np.pi
 	vmax = 15*T/L #m/s
-	mx.assign(256*1000/L+128*1000*t*T/L)
-	my.assign(256*1000/L+128*1000*t*T/L)
+	mx.assign(256*1000/L+51.2*1000/(24*60*60)*t*T/L)
+	my.assign(256*1000/L+51.2*1000/(24*60*60)*t*T/L)
 	r = fd.sqrt((mx - X[0])**2 + (my - X[1])**2) 
 	s = 1/50*fd.exp(-r/(100*1000)*L)
 	v_a.interpolate(fd.as_vector([-s*vmax*( fd.cos(a)*(X[0]-mx) + fd.sin(a)*(X[1]-my)), 
@@ -65,13 +65,13 @@ def objective(u, uprev, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o,
 	tau_u   = tau(u)
 	delta  = fd.sqrt(delta_min**2+2*fd.inner(tau_u,tau_u))
 	P  = Pstar*H*fd.exp(-20*(1.0-A))
-	obj_divsigma = dt* P/2*delta*fd.dx 
+	obj_divsigma = dt*P/2*delta*fd.dx 
 	obj_rhoHu = 0.5*rho_i*H*fd.inner(u, u)*fd.dx
 
 	tau_a = tau_atm(C_a, rho_a, v_a)
 	tau_o = tau_ocean(C_o, rho_o, u, v_o)
 	obj_F =   rho_i*H*fd.inner(uprev, u)*fd.dx\
-	        + dt*fd.inner(tau_a, u)*fd.dx
+	             + dt*fd.inner(tau_a, u)*fd.dx
 
 	obj = obj_rhoHu + obj_divsigma - obj_F
 
@@ -92,7 +92,7 @@ def gradient(u, uprev, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o, rho_o, v_o,
 	
 	    F(ute) - A(u, ute) = 
 	    \int rho_ice*H_n*uprev*ute + dt*tau_atm(t_n)*ute + 
-	                               + dt*rho_ice*H_n*h_c*(e_r x v_ocean)*ute
+	                               + dt*rho_ice*H_n*f_c*(e_r x v_ocean)*ute
 	    - 
 	    \int rho_ice*H_n*u*ute + dt*rho_ice*H_n*f_c*(e_r x u)*ute
 	                           + dt*sigma_n(A_n,H_n,u)*grad(ute)
@@ -114,7 +114,7 @@ def gradient(u, uprev, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o, rho_o, v_o,
 
 	P  = Pstar*H*fd.exp(-20*(1.0-A))
 	F  = rho_i*H*fd.inner(uprev, ute)*fd.dx + \
-	     dt*fd.inner(tau_a, ute)*fd.dx
+	          dt*fd.inner(tau_a, ute)*fd.dx
 
 
 	AA = rho_i*H*fd.inner(u, ute)*fd.dx\
@@ -122,11 +122,11 @@ def gradient(u, uprev, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o, rho_o, v_o,
 	     - dt*P*fd.tr(Ete)*fd.dx
 
 	if (abs(C_o) > 1e-15):
-		AA += - dt*fd.inner(tau_o, ute)*fd.dx	
+		AA += -dt*fd.inner(tau_o, ute)*fd.dx	
 
 	# Coriolis:
 	if (abs(f_c) > 1e-15):
-	    F += dt*rho_i*H*f_c*fd.inner(er_x_vo, ute)*fd.dx 
+	    F  += dt*rho_i*H*f_c*fd.inner(er_x_vo, ute)*fd.dx 
 	    AA += dt*rho_i*H*f_c*fd.inner(er_x_u , ute)*fd.dx
 
 
@@ -166,7 +166,7 @@ def hessian_NewtonStandard(u, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o,
 	if (abs(C_o) > 1e-15):
 		dtauodu = -rho_o*C_o*fd.sqrt(fd.inner(v_o-u, v_o-u))*fd.inner(utr,ute)*fd.dx + \
 	    	      -rho_o*C_o/fd.sqrt(fd.inner(v_o-u, v_o-u))*fd.inner(v_o-u,utr)*fd.inner(v_o-u,ute)*fd.dx
-		hess += dt*dtauodu
+		hess -= dt*dtauodu
 
 	# Coriolis:
 	if (abs(f_c) > 1e-15):
@@ -203,7 +203,7 @@ def hessian_NewtonStressvel(u, S, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o,
 	if (abs(C_o) > 1e-15):
 		dtauodu = -rho_o*C_o*fd.sqrt(fd.inner(v_o-u, v_o-u))*fd.inner(utr,ute)*fd.dx + \
 	    	      -rho_o*C_o/fd.sqrt(fd.inner(v_o-u, v_o-u))*fd.inner(v_o-u,utr)*fd.inner(v_o-u,ute)*fd.dx
-		hess += dt*dtauodu
+		hess -= dt*dtauodu
 
 	# Coriolis:
 	if (abs(f_c) > 1e-15):
