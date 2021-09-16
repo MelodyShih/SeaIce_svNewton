@@ -35,7 +35,7 @@ args, _ = parser.parse_known_args()
 
 #======================================
 ## nolinear solver parameters
-NL_CHECK_GRADIENT = True
+NL_CHECK_GRADIENT = False
 MONITOR_NL_ITER = True
 MONITOR_NL_STEPSEARCH = False
 NL_SOLVER_GRAD_RTOL = 1e-8
@@ -90,7 +90,7 @@ fc = 0.0 #1.46e-4*T #s^{-1}
 # air drag coeff.
 Ca = 1.2e-3*L/G 
 # water drag coeff.
-Co = 0.0 #5.5e-3*L/G
+Co = 5.5e-3*L/G
 # air density
 rhoa = 1.3/900.0 #kg/m^3 
 rhoo = 1026.0/900.0 #kg/m^3
@@ -223,7 +223,7 @@ solvH3 = LinearVariationalSolver(probH3)
 while t < Tfinal - 0.5*dt and ntstep < 200:
     if MONITOR_NL_ITER:
         PETSc.Sys.Print("[{0:2d}] Time: {1:>5.2e}".format(ntstep, t))
-    #WeakForm.update_va(mx, my, t, X, v_a, T, L)
+    WeakForm.update_va(mx, my, t, X, v_a, T, L)
     sol_uprevt.assign(sol_u)
 
 	## output
