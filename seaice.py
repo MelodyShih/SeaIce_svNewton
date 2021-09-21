@@ -72,8 +72,8 @@ dt  = 30*60/T/40 # 30 min.
 dtc = Constant(dt)
 t   = 0.0
 ntstep = 0
-PETSc.Sys.Print("[info] Tfinal in days", Tfinal)
-PETSc.Sys.Print("[info] dt in days", dt*T)
+PETSc.Sys.Print("[info] Tfinal in days", Tfinal*T/24/60/60)
+PETSc.Sys.Print("[info] dt in days", dt*T/24/60/60)
 
 ## Discretization: 
 # v: sea ice velocity (P_k)
@@ -238,11 +238,11 @@ while t < Tfinal - 0.5*dt:
             PETSc.Sys.Print("[{0:2d}] Time: {1:>5.2e}; {2:>5.2e} days; nonlinear iter {3:>3d}".format(ntstep, t, t*1e3/60/60/24, nonlin_it_total))
         eta.interpolate(WeakForm.eta(sol_u, sol_A, sol_H, delta_min, Pstar))
 
-        outfile_eta.write(eta, time=t)
-        #outfile_va.write(v_a,  time=t)
-        #outfile_u.write(sol_u, time=t)
-        #outfile_A.write(sol_A, time=t)
-        #outfile_H.write(sol_H, time=t)
+        outfile_eta.write(eta, time=t*T/24/60/60)
+        #outfile_va.write(v_a,  time=t*T/24/60/60)
+        #outfile_u.write(sol_u, time=t*T/24/60/60)
+        #outfile_A.write(sol_A, time=t*T/24/60/60)
+        #outfile_H.write(sol_H, time=t*T/24/60/60)
 
     ### Advance A, H
     solvA1.solve()
@@ -287,7 +287,6 @@ while t < Tfinal - 0.5*dt:
 
         Sresnorm = 0.0
         for itn in range(NL_SOLVER_MAXITER+1):
-        #for itn in range(0):
             # print iteration line
             if MONITOR_NL_ITER:
                 PETSc.Sys.Print("{0:>3d} {1:>6d}{2:>20.12e}{3:>14.6e}{4:>+15.6e}{5:>+15.6e}{6:>10f}".format(
@@ -411,7 +410,7 @@ while t < Tfinal - 0.5*dt:
         )
         nonlin_it_total += itn
         # stop if nonlinear solve failed
-        if not nlsolve_success or itn == 100:
+        if not nlsolve_success or itn == NL_SOLVER_MAXITER:
             PETSc.Sys.Print("[{0:2d}] Failed solving momentum equation".format(ntstep))
             break
 
