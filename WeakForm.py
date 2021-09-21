@@ -13,13 +13,27 @@ import numpy as np
 import math
 import sys
 
+QUAD_DEG=10
+
+def eta(u, A, H, delta_min, Pstar):
+	e = 2
+	tau_u   = tau(u)
+	delta  = fd.sqrt(delta_min**2+2*fd.inner(tau_u,tau_u))
+	P  = Pstar*H*fd.exp(-20*(1.0-A))
+	return 1.0/e**2*P/2/delta 
+
 def update_va(mx, my, t, X, v_a, T, L):
 	a = 72./180*np.pi
+	ws = math.tanh(t*(8.0-t)/2.0)
 	vmax = 15*T/L #m/s
-	mx.assign(256*1000/L+51.2*1000/(24*60*60)*t*T/L)
-	my.assign(256*1000/L+51.2*1000/(24*60*60)*t*T/L)
+	if t < 4*24*60*60: 
+		mx.assign(256*1000/L+51.2*1000/(24*60*60)*t*T/L)
+		my.assign(256*1000/L+51.2*1000/(24*60*60)*t*T/L)
+	else:
+		mx.assign(665.6*1000/L-51.2*1000/(24*60*60)*t*T/L)
+		my.assign(665.6*1000/L-51.2*1000/(24*60*60)*t*T/L)
 	r = fd.sqrt((mx - X[0])**2 + (my - X[1])**2) 
-	s = 1/50*fd.exp(-r/(100*1000)*L)
+	s = 1.0/50*fd.exp(-r/(100*1000)*L)
 	v_a.interpolate(fd.as_vector([-s*vmax*( fd.cos(a)*(X[0]-mx) + fd.sin(a)*(X[1]-my)), 
 	                              -s*vmax*(-fd.sin(a)*(X[0]-mx) + fd.cos(a)*(X[1]-my))]))
 
@@ -65,18 +79,20 @@ def objective(u, uprev, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o,
 	tau_u   = tau(u)
 	delta  = fd.sqrt(delta_min**2+2*fd.inner(tau_u,tau_u))
 	P  = Pstar*H*fd.exp(-20*(1.0-A))
-	obj_divsigma = dt*P/2*delta*fd.dx 
-	obj_rhoHu = 0.5*rho_i*H*fd.inner(u, u)*fd.dx
+	E = fd.sym(fd.nabla_grad(u))
+	I = fd.Identity(2)
+	obj_divsigma = dt*P/2*delta*fd.dx(degree=QUAD_DEG) - dt*P*fd.tr(E)*fd.dx(degree=QUAD_DEG)
+	obj_rhoHu = 0.5*rho_i*H*fd.inner(u, u)*fd.dx(degree=QUAD_DEG)
 
 	tau_a = tau_atm(C_a, rho_a, v_a)
 	tau_o = tau_ocean(C_o, rho_o, u, v_o)
-	obj_F =   rho_i*H*fd.inner(uprev, u)*fd.dx\
-	             + dt*fd.inner(tau_a, u)*fd.dx
+	obj_F =   rho_i*H*fd.inner(uprev, u)*fd.dx(degree=QUAD_DEG)\
+	             + dt*fd.inner(tau_a, u)*fd.dx(degree=QUAD_DEG)
 
 	obj = obj_rhoHu + obj_divsigma - obj_F
 
 	if (abs(C_o)>1e-15):
-		obj_ocean = dt*(-1./3)*C_o*rho_o*fd.sqrt(fd.inner(v_o-u, v_o-u))**3*fd.dx
+		obj_ocean = dt*(-1./3)*C_o*rho_o*fd.sqrt(fd.inner(v_o-u, v_o-u))**3*fd.dx(degree=QUAD_DEG)
 		obj -= obj_ocean
 
 	return obj
@@ -105,29 +121,27 @@ def gradient(u, uprev, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o, rho_o, v_o,
 	tau_a = tau_atm(C_a, rho_a, v_a)
 	tau_o = tau_ocean(C_o, rho_o, u, v_o)
 
-	er_x_vo = fd.as_vector([-v_o[1], v_o[0]])
-	er_x_u  = fd.as_vector([  -u[1],   u[0]])
-
 	tau_u   = tau(u)
 	tau_ute = tau(ute)
 	Ete = fd.sym(fd.nabla_grad(ute))
 
 	P  = Pstar*H*fd.exp(-20*(1.0-A))
-	F  = rho_i*H*fd.inner(uprev, ute)*fd.dx + \
-	          dt*fd.inner(tau_a, ute)*fd.dx
+	F  = rho_i*H*fd.inner(uprev, ute)*fd.dx(degree=QUAD_DEG) + \
+	          dt*fd.inner(tau_a, ute)*fd.dx(degree=QUAD_DEG)
 
-
-	AA = rho_i*H*fd.inner(u, ute)*fd.dx\
-	     + dt*P/fd.sqrt(delta_min**2 + 2*fd.inner(tau_u, tau_u))*fd.inner(tau_u, tau_ute)*fd.dx\
-	     - dt*P*fd.tr(Ete)*fd.dx
+	AA = rho_i*H*fd.inner(u, ute)*fd.dx(degree=QUAD_DEG)\
+	     + dt*P/fd.sqrt(delta_min**2 + 2*fd.inner(tau_u, tau_u))*fd.inner(tau_u, tau_ute)*fd.dx(degree=QUAD_DEG)\
+	     - dt*P*fd.tr(Ete)*fd.dx(degree=QUAD_DEG)
 
 	if (abs(C_o) > 1e-15):
-		AA += -dt*fd.inner(tau_o, ute)*fd.dx	
+		AA += -dt*fd.inner(tau_o, ute)*fd.dx(degree=QUAD_DEG)	
 
 	# Coriolis:
 	if (abs(f_c) > 1e-15):
-	    F  += dt*rho_i*H*f_c*fd.inner(er_x_vo, ute)*fd.dx 
-	    AA += dt*rho_i*H*f_c*fd.inner(er_x_u , ute)*fd.dx
+	    er_x_vo = fd.as_vector([-v_o[1], v_o[0]])
+	    er_x_u  = fd.as_vector([  -u[1],   u[0]])
+	    F  += dt*rho_i*H*f_c*fd.inner(er_x_vo, ute)*fd.dx(degree=QUAD_DEG) 
+	    AA += dt*rho_i*H*f_c*fd.inner(er_x_u , ute)*fd.dx(degree=QUAD_DEG)
 
 
 	grad = AA - F
@@ -149,7 +163,7 @@ def hessian_NewtonStandard(u, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o,
 	ute = fd.TestFunction(FncSp)
 	er_x_utr  = fd.as_vector([  -utr[1],   utr[0]])
 
-	hess =         rho_i*H*fd.inner(utr,ute)*fd.dx
+	hess =         rho_i*H*fd.inner(utr,ute)*fd.dx(degree=QUAD_DEG)
 
 	# d(sigma)/d(u)
 	P  = Pstar*H*fd.exp(-20*(1.0-A))
@@ -157,20 +171,20 @@ def hessian_NewtonStandard(u, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o,
 	tau_ute = tau(ute)
 	tau_utr = tau(utr) 
 	delta  = fd.sqrt(delta_min**2+2*fd.inner(tau_u,tau_u))
-	dsigmadu =         P/delta*fd.inner(tau_utr,tau_ute)*fd.dx + \
-	           -(P/delta**3)*2*fd.inner(tau_u  ,tau_utr)*fd.inner(tau_u,tau_ute)*fd.dx 
+	dsigmadu =         P/delta*fd.inner(tau_utr,tau_ute)*fd.dx(degree=QUAD_DEG) + \
+	           -(P/delta**3)*2*fd.inner(tau_u  ,tau_utr)*fd.inner(tau_u,tau_ute)*fd.dx(degree=QUAD_DEG) 
 
 	hess += dt*dsigmadu
 
 	# dtau_ocean/du
 	if (abs(C_o) > 1e-15):
-		dtauodu = -rho_o*C_o*fd.sqrt(fd.inner(v_o-u, v_o-u))*fd.inner(utr,ute)*fd.dx + \
-	    	      -rho_o*C_o/fd.sqrt(fd.inner(v_o-u, v_o-u))*fd.inner(v_o-u,utr)*fd.inner(v_o-u,ute)*fd.dx
+		dtauodu = -rho_o*C_o*fd.sqrt(fd.inner(v_o-u, v_o-u))*fd.inner(utr,ute)*fd.dx(degree=QUAD_DEG) + \
+	    	      -rho_o*C_o/fd.sqrt(fd.inner(v_o-u, v_o-u))*fd.inner(v_o-u,utr)*fd.inner(v_o-u,ute)*fd.dx(degree=QUAD_DEG)
 		hess -= dt*dtauodu
 
 	# Coriolis:
 	if (abs(f_c) > 1e-15):
-	    hess += dt*rho_i*H*f_c*fd.inner(er_x_utr,ute)*fd.dx
+	    hess += dt*rho_i*H*f_c*fd.inner(er_x_utr,ute)*fd.dx(degree=QUAD_DEG)
            
 	return hess
 
@@ -186,7 +200,7 @@ def hessian_NewtonStressvel(u, S, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o,
 	ute = fd.TestFunction(FncSp)
 	er_x_utr  = fd.as_vector([  -utr[1],   utr[0]])
 
-	hess = rho_i*H*fd.inner(utr,ute)*fd.dx
+	hess = rho_i*H*fd.inner(utr,ute)*fd.dx(degree=QUAD_DEG)
 
 	# d(sigma)/d(u)
 	P  = Pstar*H*fd.exp(-20*(1.0-A))
@@ -194,20 +208,20 @@ def hessian_NewtonStressvel(u, S, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o,
 	tau_ute = tau(ute)
 	tau_utr = tau(utr) 
 	delta = fd.sqrt(delta_min**2+2*fd.inner(tau_u,tau_u))
-	dsigmadu =         P/delta*fd.inner(tau_utr,tau_ute)*fd.dx\
-	           -(P/delta**2)*2*fd.inner(tau_u  ,tau_utr)*fd.inner(S,tau_ute)*fd.dx 
+	dsigmadu =         P/delta*fd.inner(tau_utr,tau_ute)*fd.dx(degree=QUAD_DEG)\
+	           -(P/delta**2)*2*fd.inner(tau_u  ,tau_utr)*fd.inner(S,tau_ute)*fd.dx(degree=QUAD_DEG) 
 
 	hess += dt*dsigmadu
 
 	# dtau_ocean/du
 	if (abs(C_o) > 1e-15):
-		dtauodu = -rho_o*C_o*fd.sqrt(fd.inner(v_o-u, v_o-u))*fd.inner(utr,ute)*fd.dx + \
-	    	      -rho_o*C_o/fd.sqrt(fd.inner(v_o-u, v_o-u))*fd.inner(v_o-u,utr)*fd.inner(v_o-u,ute)*fd.dx
+		dtauodu = -rho_o*C_o*fd.sqrt(fd.inner(v_o-u, v_o-u))*fd.inner(utr,ute)*fd.dx(degree=QUAD_DEG) + \
+	    	      -rho_o*C_o/fd.sqrt(fd.inner(v_o-u, v_o-u))*fd.inner(v_o-u,utr)*fd.inner(v_o-u,ute)*fd.dx(degree=QUAD_DEG)
 		hess -= dt*dtauodu
 
 	# Coriolis:
 	if (abs(f_c) > 1e-15):
-	    hess += rho_i*H*f_c*fd.inner(er_x_utr,ute)*fd.dx
+	    hess += rho_i*H*f_c*fd.inner(er_x_utr,ute)*fd.dx(degree=QUAD_DEG)
 
 	return hess
 
@@ -221,9 +235,9 @@ def hessian_dualStep(u, ustep, S, DualFncSp, delta_min):
 	tau_ustep = tau(ustep)
 	delta     = fd.sqrt(delta_min**2+2*fd.inner(tau_u,tau_u))
 	delta_sq  = delta_min**2+2*fd.inner(tau_u,tau_u)
-	S_step    = - fd.inner(S,Ste)*fd.dx\
-                - 2.0/delta_sq*fd.inner(tau_ustep, tau_u)*fd.inner(S,Ste)*fd.dx\
-                + 1.0/delta*fd.inner(tau_ustep+tau_u, Ste)*fd.dx
+	S_step    = - fd.inner(S,Ste)*fd.dx(degree=QUAD_DEG)\
+                - 2.0/delta_sq*fd.inner(tau_ustep, tau_u)*fd.inner(S,Ste)*fd.dx(degree=QUAD_DEG)\
+                + 1.0/delta*fd.inner(tau_ustep+tau_u, Ste)*fd.dx(degree=QUAD_DEG)
 	return S_step
 
 def dualresidual(S, u, DualFncSp, delta_min):
@@ -233,12 +247,12 @@ def dualresidual(S, u, DualFncSp, delta_min):
 	Ste   = fd.TestFunction(DualFncSp)
 	tau_u = tau(u)
 	delta = fd.sqrt(delta_min**2+2*fd.inner(tau_u,tau_u))
-	res   = delta*fd.inner(S, Ste)*fd.dx - fd.inner(tau_u, Ste)*fd.dx
+	res   = delta*fd.inner(S, Ste)*fd.dx(degree=QUAD_DEG) - fd.inner(tau_u, Ste)*fd.dx(degree=QUAD_DEG)
 	return res
 
 def hessian_dualUpdate_boundMaxMagnitude(S, DualFncSp, max_magn):
 	S_test = fd.TestFunction(DualFncSp)
 	S_rescaled = fd.conditional( fd.lt(fd.inner(S, S), max_magn*max_magn),\
 	                fd.inner(S, S_test),\
-	                fd.inner(S, S_test)/fd.sqrt(fd.inner(S,S))*max_magn)*fd.dx
+	                fd.inner(S, S_test)/fd.sqrt(fd.inner(S,S))*max_magn)*fd.dx(degree=QUAD_DEG)
 	return S_rescaled
