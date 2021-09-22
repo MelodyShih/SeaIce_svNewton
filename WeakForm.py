@@ -23,13 +23,16 @@ def eta(u, A, H, delta_min, Pstar):
 	return 1.0/e**2*P/2/delta 
 
 def update_va(mx, my, t, X, v_a, T, L):
-	a = 72./180*np.pi
-	ws = math.tanh(t*(8.0-t)/2.0)
-	vmax = 15*T/L #m/s
 	if t < 4*24*60*60: 
+		a = 72./180*np.pi
+		ws = math.tanh(t*(8.0-t)/2.0)
+		vmax = 15*T/L #m/s
 		mx.assign(256*1000/L+51.2*1000/(24*60*60)*t*T/L)
 		my.assign(256*1000/L+51.2*1000/(24*60*60)*t*T/L)
 	else:
+		a = 81./180*np.pi
+		ws = math.tanh(t*(8.0-t)/2.0)
+		vmax = 15*T/L #m/s
 		mx.assign(665.6*1000/L-51.2*1000/(24*60*60)*t*T/L)
 		my.assign(665.6*1000/L-51.2*1000/(24*60*60)*t*T/L)
 	r = fd.sqrt((mx - X[0])**2 + (my - X[1])**2) 

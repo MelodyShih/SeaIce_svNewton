@@ -39,14 +39,14 @@ NL_CHECK_GRADIENT = False
 MONITOR_NL_ITER = True
 MONITOR_NL_STEPSEARCH = False
 NL_SOLVER_GRAD_RTOL = 1e-4
-NL_SOLVER_GRAD_STEP_RTOL = 1e-8
+NL_SOLVER_GRAD_STEP_RTOL = 1e-10
 NL_SOLVER_MAXITER = 300
 NL_SOLVER_STEP_MAXITER = 15
 NL_SOLVER_STEP_ARMIJO = 1.0e-4
 nonlin_it_total = 0
 
 ## Output
-OUTPUT_VTK = True
+OUTPUT_VTK = False
 OUTPUT_VTK_INIT = False
 if OUTPUT_VTK:
     #outfile_va  = File("vtk/"+args.linearization+"/sol_va_ts.pvd")
@@ -67,7 +67,7 @@ Lx = Ly = 512*1000/L
 mesh = RectangleMesh(Nx, Ny, Lx, Ly)
 PETSc.Sys.Print("[info] dx in km", 512/Nx)
 
-Tfinal = 3*24*60*60/T #2/T #days
+Tfinal = 8*24*60*60/T #2/T #days
 dt  = 30*60/T/40 # 30 min.
 dtc = Constant(dt)
 t   = 0.0
@@ -76,9 +76,9 @@ PETSc.Sys.Print("[info] Tfinal in days", Tfinal*T/24/60/60)
 PETSc.Sys.Print("[info] dt in days", dt*T/24/60/60)
 
 ## Discretization: 
-# v: sea ice velocity (P_k)
-# A: sea ice concentration (P_k-2)
-# H: mean sea ice thickness (P_k-2)
+# v: sea ice velocity
+# A: sea ice concentration
+# H: mean sea ice thickness
 velt  = FiniteElement("CG", mesh.ufl_cell(), 1)
 vdelt = TensorElement("DG", mesh.ufl_cell(), 2)
 Aelt  = FiniteElement("DG", mesh.ufl_cell(), 2)
@@ -236,13 +236,14 @@ while t < Tfinal - 0.5*dt:
     if ntstep % 160 == 0:
         if MONITOR_NL_ITER:
             PETSc.Sys.Print("[{0:2d}] Time: {1:>5.2e}; {2:>5.2e} days; nonlinear iter {3:>3d}".format(ntstep, t, t*1e3/60/60/24, nonlin_it_total))
-        eta.interpolate(WeakForm.eta(sol_u, sol_A, sol_H, delta_min, Pstar))
+        if OUTPUT_VTK:
+            eta.interpolate(WeakForm.eta(sol_u, sol_A, sol_H, delta_min, Pstar))
 
-        outfile_eta.write(eta, time=t*T/24/60/60)
-        #outfile_va.write(v_a,  time=t*T/24/60/60)
-        #outfile_u.write(sol_u, time=t*T/24/60/60)
-        #outfile_A.write(sol_A, time=t*T/24/60/60)
-        #outfile_H.write(sol_H, time=t*T/24/60/60)
+            outfile_eta.write(eta, time=t*T/24/60/60)
+            #outfile_va.write(v_a,  time=t*T/24/60/60)
+            #outfile_u.write(sol_u, time=t*T/24/60/60)
+            #outfile_A.write(sol_A, time=t*T/24/60/60)
+            #outfile_H.write(sol_H, time=t*T/24/60/60)
 
     ### Advance A, H
     solvA1.solve()
