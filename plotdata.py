@@ -18,4 +18,5 @@ ax.set_xlabel(xlabel)
 ax.legend([legend])
 
 plt.savefig('conv.png')
+plt.show()
 

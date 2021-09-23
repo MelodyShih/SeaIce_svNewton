@@ -40,35 +40,39 @@ MONITOR_NL_ITER = True
 MONITOR_NL_STEPSEARCH = False
 NL_SOLVER_GRAD_RTOL = 1e-4
 NL_SOLVER_GRAD_STEP_RTOL = 1e-10
-NL_SOLVER_MAXITER = 300
+NL_SOLVER_MAXITER = 500
 NL_SOLVER_STEP_MAXITER = 15
 NL_SOLVER_STEP_ARMIJO = 1.0e-4
 nonlin_it_total = 0
-
-## Output
-OUTPUT_VTK = False
-OUTPUT_VTK_INIT = False
-if OUTPUT_VTK:
-    #outfile_va  = File("vtk/"+args.linearization+"/sol_va_ts.pvd")
-    outfile_eta = File("vtk/"+args.linearization+"/sol_eta_ts.pvd")
-    #outfile_A   = File("vtk/"+args.linearization+"/sol_A_ts.pvd")
-    #outfile_H   = File("vtk/"+args.linearization+"/sol_H_ts.pvd")
-    #outfile_u   = File("vtk/"+args.linearization+"/sol_u_ts.pvd")
 
 ## Scaling
 T = 1e3       # 1e3 second
 L = 1e3       # 1e3 m
 G = 1         # 1 m
 
+## Output
+OUTPUT_VTK = True
+OUTPUT_VTK_INIT = True
+if OUTPUT_VTK:
+    #outfile_va  = File("/scratch/vtk/"+args.linearization+"/sol_va_ts.pvd")
+    outfile_eta = File("/scratch/vtk/"+args.linearization+"/sol_eta_ts_"+str(L)+".pvd")
+    #outfile_A   = File("/scratch/vtk/"+args.linearization+"/sol_A_ts_"+str(L)+".pvd")
+    #outfile_H   = File("/scratch/vtk/"+args.linearization+"/sol_H_ts_"+str(L)+".pvd")
+    outfile_u   = File("/scratch/vtk/"+args.linearization+"/sol_u_ts_"+str(L)+".pvd")
+
+#outfile_e   = File("vtk/"+args.linearization+"/strainrate_"+str(L)+".pvd")
+
+
 ## Domain: (0,1)x(0,1)
 dim = 2
-Nx = Ny = 128
+Nx = Ny = int(512/4.0)
 Lx = Ly = 512*1000/L
 mesh = RectangleMesh(Nx, Ny, Lx, Ly)
-PETSc.Sys.Print("[info] dx in km", 512/Nx)
+PETSc.Sys.Print("[info] dx in km", (512*1000/L)/Nx)
+PETSc.Sys.Print("[info] Nx", Nx)
 
 Tfinal = 8*24*60*60/T #2/T #days
-dt  = 30*60/T/40 # 30 min.
+dt  = 30*60/T/40 # 30 min; 40: Nx = 128; 80: Nx = 256; 20: Nx = 64
 dtc = Constant(dt)
 t   = 0.0
 ntstep = 0
@@ -92,7 +96,7 @@ H = FunctionSpace(mesh, Helt)
 
 ## Parameteres
 # fc: Coriolis
-fc = 0.0 #1.46e-4*T #s^{-1}
+fc = 0.0 #1.46e-4/T #s^{-1}
 # air drag coeff.
 Ca = 1.2e-3*L/G 
 # water drag coeff.
@@ -116,6 +120,7 @@ step_A     = Function(A)
 sol_H      = Function(H)
 step_H     = Function(H)
 eta        = Function(Vd1)
+strainrate = Function(Vd)
 
 # other vector
 v_ocean = Function(V)
@@ -153,9 +158,9 @@ WeakForm.update_va(mx, my, 0.0, X, v_a, T, L)
 
 # visualize initial value
 if OUTPUT_VTK_INIT:
-    File("vtk/"+args.linearization+"/initial_vo.pvd").write(v_ocean)
-    File("vtk/"+args.linearization+"/initial_va.pvd").write(v_a)
-    File("vtk/"+args.linearization+"/initial_H.pvd").write(sol_H)
+    File("/scratch/vtk/"+args.linearization+"/initial_vo_"+str(L)+".pvd").write(v_ocean)
+    File("/scratch/vtk/"+args.linearization+"/initial_va_"+str(L)+".pvd").write(v_a)
+    File("/scratch/vtk/"+args.linearization+"/initial_H_"+str(L)+".pvd").write(sol_H)
 
 ## Weak Form
 # set weak forms of objective functional and gradient
@@ -241,7 +246,7 @@ while t < Tfinal - 0.5*dt:
 
             outfile_eta.write(eta, time=t*T/24/60/60)
             #outfile_va.write(v_a,  time=t*T/24/60/60)
-            #outfile_u.write(sol_u, time=t*T/24/60/60)
+            outfile_u.write(sol_u, time=t*T/24/60/60)
             #outfile_A.write(sol_A, time=t*T/24/60/60)
             #outfile_H.write(sol_H, time=t*T/24/60/60)
 
@@ -282,16 +287,17 @@ while t < Tfinal - 0.5*dt:
             Vdmassweak = inner(TrialFunction(Vd), TestFunction(Vd)) * dx
             Md = assemble(Vdmassweak)
         if MONITOR_NL_ITER:
-            PETSc.Sys.Print('{0:<3} "{1:>6}"{2:^20}{3:^14}{4:^15}{5:^15}{6:^10}'.format(
+            PETSc.Sys.Print('{0:<3} "{1:>6}"{2:^20}{3:^14}{4:^15}{5:^15}{6:^10}{7:^10}'.format(
                   "Itn", "default", "Energy", "||g||_l2", 
-                   "(grad,step)", "dual res", "step len"))
+                   "(grad,step)", "dual res", "dual(%)", "step len"))
 
         Sresnorm = 0.0
+        Sprojpercent = 0.0
         for itn in range(NL_SOLVER_MAXITER+1):
             # print iteration line
             if MONITOR_NL_ITER:
-                PETSc.Sys.Print("{0:>3d} {1:>6d}{2:>20.12e}{3:>14.6e}{4:>+15.6e}{5:>+15.6e}{6:>10f}".format(
-                      itn, lin_it, obj_val, g_norm, angle_grad_step, Sresnorm, step_length))
+                PETSc.Sys.Print("{0:>3d} {1:>6d}{2:>20.12e}{3:>14.6e}{4:>+15.6e}{5:>15.6e}{6:>10.2f}{7:>10f}".format(
+                      itn, lin_it, obj_val, g_norm, angle_grad_step, Sresnorm, Sprojpercent*100, step_length))
         
             # stop if converged
             if (g_norm < 1e-13 or np.abs(angle_grad_step) < 1e-16) and itn > 1:
@@ -321,10 +327,11 @@ while t < Tfinal - 0.5*dt:
                     Abstract.Vector.setZero(S_proj)
                 else:
                     # project S to unit sphere
-                    Sprojweak = WeakForm.hessian_dualUpdate_boundMaxMagnitude(S, Vd, 0.5)
+                    Sprojweak, S_ind = WeakForm.hessian_dualUpdate_boundMaxMagnitude(S, Vd, sqrt(0.5))
                     b = assemble(Sprojweak)
                     solve(Md, S_proj.vector(), b)
-                    Sresnorm = norm(assemble(dualres))
+                    Sresnorm     = norm(assemble(dualres))
+                    Sprojpercent = assemble(S_ind)/Lx/Ly
         
             # assemble linearized system
             problem = LinearVariationalProblem(hess, grad, step_u, bcs=bcstep_u)
@@ -409,6 +416,9 @@ while t < Tfinal - 0.5*dt:
                 lin_it_total
             )
         )
+        #strainrate.interpolate(sym(nabla_grad(sol_u))) 
+        #outfile_e.write(strainrate, Time = t)
+        
         nonlin_it_total += itn
         # stop if nonlinear solve failed
         if not nlsolve_success or itn == NL_SOLVER_MAXITER:
@@ -424,6 +434,6 @@ while t < Tfinal - 0.5*dt:
 
 # output vtk file for solutions
 if OUTPUT_VTK:
-    File("vtk/"+args.linearization+"/solution_u.pvd").write(sol_u)
-    File("vtk/"+args.linearization+"/solution_A.pvd").write(sol_A)
-    File("vtk/"+args.linearization+"/solution_H.pvd").write(sol_H)
+    File("/scratch/vtk/"+args.linearization+"/solution_u.pvd").write(sol_u)
+    File("/scratch/vtk/"+args.linearization+"/solution_A.pvd").write(sol_A)
+    File("/scratch/vtk/"+args.linearization+"/solution_H.pvd").write(sol_H)

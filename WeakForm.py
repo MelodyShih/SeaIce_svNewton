@@ -26,13 +26,13 @@ def update_va(mx, my, t, X, v_a, T, L):
 	if t < 4*24*60*60: 
 		a = 72./180*np.pi
 		ws = math.tanh(t*(8.0-t)/2.0)
-		vmax = 15*T/L #m/s
+		vmax = 15 #*T/L #m/s
 		mx.assign(256*1000/L+51.2*1000/(24*60*60)*t*T/L)
 		my.assign(256*1000/L+51.2*1000/(24*60*60)*t*T/L)
 	else:
 		a = 81./180*np.pi
 		ws = math.tanh(t*(8.0-t)/2.0)
-		vmax = 15*T/L #m/s
+		vmax = 15 #*T/L #m/s
 		mx.assign(665.6*1000/L-51.2*1000/(24*60*60)*t*T/L)
 		my.assign(665.6*1000/L-51.2*1000/(24*60*60)*t*T/L)
 	r = fd.sqrt((mx - X[0])**2 + (my - X[1])**2) 
@@ -258,4 +258,7 @@ def hessian_dualUpdate_boundMaxMagnitude(S, DualFncSp, max_magn):
 	S_rescaled = fd.conditional( fd.lt(fd.inner(S, S), max_magn*max_magn),\
 	                fd.inner(S, S_test),\
 	                fd.inner(S, S_test)/fd.sqrt(fd.inner(S,S))*max_magn)*fd.dx(degree=QUAD_DEG)
-	return S_rescaled
+	S_ind = fd.conditional( fd.lt(fd.inner(S, S), max_magn*max_magn),\
+	                0.0,\
+	                1.0)*fd.dx(degree=QUAD_DEG)
+	return S_rescaled, S_ind
