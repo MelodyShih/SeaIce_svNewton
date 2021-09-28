@@ -39,7 +39,7 @@ NL_CHECK_GRADIENT = False
 MONITOR_NL_ITER = True
 MONITOR_NL_STEPSEARCH = False
 NL_SOLVER_GRAD_RTOL = 1e-4
-NL_SOLVER_GRAD_STEP_RTOL = 1e-10
+NL_SOLVER_GRAD_STEP_RTOL = 1e-8
 NL_SOLVER_MAXITER = 500
 NL_SOLVER_STEP_MAXITER = 15
 NL_SOLVER_STEP_ARMIJO = 1.0e-4
@@ -51,13 +51,13 @@ L = 1e3       # 1e3 m
 G = 1         # 1 m
 
 ## Output
-OUTPUT_VTK = True
-OUTPUT_VTK_INIT = True
+OUTPUT_VTK = False
+OUTPUT_VTK_INIT = False
 if OUTPUT_VTK:
     #outfile_va  = File("/scratch/vtk/"+args.linearization+"/sol_va_ts.pvd")
     outfile_eta = File("/scratch/vtk/"+args.linearization+"/sol_eta_ts_"+str(L)+".pvd")
-    #outfile_A   = File("/scratch/vtk/"+args.linearization+"/sol_A_ts_"+str(L)+".pvd")
-    #outfile_H   = File("/scratch/vtk/"+args.linearization+"/sol_H_ts_"+str(L)+".pvd")
+    outfile_A   = File("/scratch/vtk/"+args.linearization+"/sol_A_ts_"+str(L)+".pvd")
+    outfile_H   = File("/scratch/vtk/"+args.linearization+"/sol_H_ts_"+str(L)+".pvd")
     outfile_u   = File("/scratch/vtk/"+args.linearization+"/sol_u_ts_"+str(L)+".pvd")
 
 #outfile_e   = File("vtk/"+args.linearization+"/strainrate_"+str(L)+".pvd")
@@ -65,14 +65,14 @@ if OUTPUT_VTK:
 
 ## Domain: (0,1)x(0,1)
 dim = 2
-Nx = Ny = int(512/4.0)
+Nx = Ny = int(512/2.0)
 Lx = Ly = 512*1000/L
 mesh = RectangleMesh(Nx, Ny, Lx, Ly)
 PETSc.Sys.Print("[info] dx in km", (512*1000/L)/Nx)
 PETSc.Sys.Print("[info] Nx", Nx)
 
 Tfinal = 8*24*60*60/T #2/T #days
-dt  = 30*60/T/40 # 30 min; 40: Nx = 128; 80: Nx = 256; 20: Nx = 64
+dt  = 30*60/T/80 # 30 min; 40: Nx = 128; 80: Nx = 256; 20: Nx = 64
 dtc = Constant(dt)
 t   = 0.0
 ntstep = 0
@@ -108,7 +108,8 @@ rhoice = 900.0/900.0 #kg/m^3
 # ice strength 
 Pstar = 27.5e3*T**2/L**2/900.0
 #other
-delta_min = 2e-9*T
+delta_min = 2e-9*T/5
+PETSc.Sys.Print("[info] delta_min", delta_min)
 
 # solution vector
 sol_u      = Function(V)
@@ -232,23 +233,28 @@ solvH2 = LinearVariationalSolver(probH2)
 probH3 = LinearVariationalProblem(a_H, L3, step_H)
 solvH3 = LinearVariationalSolver(probH3)
 
+if args.linearization == 'stressvel':
+    Vdmassweak = inner(TrialFunction(Vd), TestFunction(Vd)) * dx
+    #Md = assemble(Vdmassweak)
+    Mdinv = assemble(Tensor(Vdmassweak).inv).petscmat
+
 
 while t < Tfinal - 0.5*dt:
     WeakForm.update_va(mx, my, t, X, v_a, T, L)
     sol_uprevt.assign(sol_u)
 
 	## output
-    if ntstep % 160 == 0:
+    if ntstep % 320 == 0:
         if MONITOR_NL_ITER:
             PETSc.Sys.Print("[{0:2d}] Time: {1:>5.2e}; {2:>5.2e} days; nonlinear iter {3:>3d}".format(ntstep, t, t*1e3/60/60/24, nonlin_it_total))
         if OUTPUT_VTK:
-            eta.interpolate(WeakForm.eta(sol_u, sol_A, sol_H, delta_min, Pstar))
+            eta.interpolate(WeakForm.eta(sol_u, sol_A, sol_H, delta_min, 27.5e3))
 
             outfile_eta.write(eta, time=t*T/24/60/60)
             #outfile_va.write(v_a,  time=t*T/24/60/60)
             outfile_u.write(sol_u, time=t*T/24/60/60)
-            #outfile_A.write(sol_A, time=t*T/24/60/60)
-            #outfile_H.write(sol_H, time=t*T/24/60/60)
+            outfile_A.write(sol_A, time=t*T/24/60/60)
+            outfile_H.write(sol_H, time=t*T/24/60/60)
 
     ### Advance A, H
     solvA1.solve()
@@ -283,9 +289,6 @@ while t < Tfinal - 0.5*dt:
         obj_val      = assemble(obj)
         step_length  = 0.0
         
-        if args.linearization == 'stressvel':
-            Vdmassweak = inner(TrialFunction(Vd), TestFunction(Vd)) * dx
-            Md = assemble(Vdmassweak)
         if MONITOR_NL_ITER:
             PETSc.Sys.Print('{0:<3} "{1:>6}"{2:^20}{3:^14}{4:^15}{5:^15}{6:^10}{7:^10}'.format(
                   "Itn", "default", "Energy", "||g||_l2", 
@@ -321,15 +324,18 @@ while t < Tfinal - 0.5*dt:
         
             # set up the linearized system
             if args.linearization == 'stressvel':
-                if 0 == itn:
+                if 0 == itn and nonlin_it_total == 0:
                     Abstract.Vector.setZero(S)
                     Abstract.Vector.setZero(S_step)
                     Abstract.Vector.setZero(S_proj)
                 else:
                     # project S to unit sphere
                     Sprojweak, S_ind = WeakForm.hessian_dualUpdate_boundMaxMagnitude(S, Vd, sqrt(0.5))
-                    b = assemble(Sprojweak)
-                    solve(Md, S_proj.vector(), b)
+                    with assemble(Sprojweak).dat.vec_ro as v:
+                        with S_proj.dat.vec as sproj:
+                            Mdinv.mult(v, sproj)
+                    #b = assemble(Sprojweak)
+                    #solve(Md, S_proj.vector(), b)
                     Sresnorm     = norm(assemble(dualres))
                     Sprojpercent = assemble(S_ind)/Lx/Ly
         
@@ -344,7 +350,10 @@ while t < Tfinal - 0.5*dt:
             if args.linearization == 'stressvel':
                 Abstract.Vector.scale(step_u, -1.0)
                 b = assemble(dualStep)
-                solve(Md, S_step.vector(), b)
+                #solve(Md, S_step.vector(), b)
+                with assemble(dualStep).dat.vec_ro as v:
+                    with S_step.dat.vec as sstep:
+                        Mdinv.mult(v, sstep)
                 Abstract.Vector.scale(step_u, -1.0)
             
             # compute the norm of the gradient
