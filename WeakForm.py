@@ -15,6 +15,11 @@ import sys
 
 QUAD_DEG=10
 
+def delta(u):
+	tau_u   = tau(u)
+	delta  = 2*fd.inner(tau_u,tau_u)
+	return delta 
+
 def eta(u, A, H, delta_min, Pstar):
 	e = 2
 	tau_u   = tau(u)
@@ -27,19 +32,21 @@ def update_va(mx, my, t, X, v_a, T, L):
 	if tday <= 4: 
 		a = 72./180*np.pi
 		ws = -math.tanh((4-tday)*(4+tday)/2)
+		#ws = -math.tanh(tday*(8.0-tday)/2.0)
 		vmax = 15*ws #*T/L #m/s
 		mx.assign(256*1000/L+51.2*1000/(24*60*60)*t*T/L)
 		my.assign(256*1000/L+51.2*1000/(24*60*60)*t*T/L)
 	else:
 		a = 81./180*np.pi
 		ws = math.tanh((12-tday)*(tday-4)/2)
+		#ws = -math.tanh(tday*(8.0-tday)/2.0)
 		vmax = 15*ws #*T/L #m/s
 		mx.assign(665.6*1000/L-51.2*1000/(24*60*60)*t*T/L)
 		my.assign(665.6*1000/L-51.2*1000/(24*60*60)*t*T/L)
 	r = fd.sqrt((mx - X[0])**2 + (my - X[1])**2) 
 	s = 1.0/50*fd.exp(-r/(100*1000)*L)
-	v_a.interpolate(fd.as_vector([s*vmax*( fd.cos(a)*(X[0]-mx) + fd.sin(a)*(X[1]-my)), 
-	                              s*vmax*(-fd.sin(a)*(X[0]-mx) + fd.cos(a)*(X[1]-my))]))
+	v_a.interpolate(fd.as_vector([s*fd.Constant(vmax)*( fd.cos(a)*(X[0]-mx) + fd.sin(a)*(X[1]-my)), 
+	                              s*fd.Constant(vmax)*(-fd.sin(a)*(X[0]-mx) + fd.cos(a)*(X[1]-my))]))
 
 def tau_atm(C_a, rho_a, v_a):
 	return C_a*rho_a*fd.sqrt(fd.inner(v_a, v_a))*v_a

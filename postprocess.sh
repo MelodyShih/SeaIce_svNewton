@@ -19,7 +19,7 @@ fi
 
 if [ $# -eq 4 ]
 then
-	python plotdata.py $dt day $2 1
+	python3 plotdata.py $dt day $2 1
 else
-	python plotdata.py $dt day $2 0
+	python3 plotdata.py $dt day $2 0
 fi

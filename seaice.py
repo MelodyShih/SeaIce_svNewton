@@ -60,19 +60,19 @@ if OUTPUT_VTK:
     outfile_H   = File("/scratch/vtk/"+args.linearization+"/sol_H_ts_"+str(L)+".pvd")
     outfile_u   = File("/scratch/vtk/"+args.linearization+"/sol_u_ts_"+str(L)+".pvd")
 
-#outfile_e   = File("vtk/"+args.linearization+"/strainrate_"+str(L)+".pvd")
+#outfile_e   = File("/scratch/vtk/"+args.linearization+"/delta_"+str(L)+".pvd")
 
 
 ## Domain: (0,1)x(0,1)
 dim = 2
 Nx = Ny = int(512/2.0)
 Lx = Ly = 512*1000/L
-mesh = RectangleMesh(Nx, Ny, Lx, Ly)
+mesh = RectangleMesh(Nx, Ny, Lx, Ly, quadrilateral=False)
 PETSc.Sys.Print("[info] dx in km", (512*1000/L)/Nx)
 PETSc.Sys.Print("[info] Nx", Nx)
 
-Tfinal = 8*24*60*60/T #2/T #days
-dt  = 30*60/T/80 # 30 min; 40: Nx = 128; 80: Nx = 256; 20: Nx = 64
+Tfinal = 6*24*60*60/T #2/T #days
+dt = 1.8/4 # 1.8/2 for N=128, 1.8/4 for N=256
 dtc = Constant(dt)
 t   = 0.0
 ntstep = 0
@@ -85,12 +85,12 @@ PETSc.Sys.Print("[info] dt in days", dt*T/24/60/60)
 # H: mean sea ice thickness
 velt  = FiniteElement("CG", mesh.ufl_cell(), 1)
 vdelt = TensorElement("DG", mesh.ufl_cell(), 2)
-Aelt  = FiniteElement("DG", mesh.ufl_cell(), 2)
-Helt  = FiniteElement("DG", mesh.ufl_cell(), 2)
+Aelt  = FiniteElement("DG", mesh.ufl_cell(), 0)
+Helt  = FiniteElement("DG", mesh.ufl_cell(), 0)
 
 V = VectorFunctionSpace(mesh, velt)
 Vd= FunctionSpace(mesh, vdelt)
-Vd1 = FunctionSpace(mesh, "DG", 2)
+Vd1 = FunctionSpace(mesh, "CG", 1)
 A = FunctionSpace(mesh, Aelt)
 H = FunctionSpace(mesh, Helt)
 
@@ -108,7 +108,7 @@ rhoice = 900.0/900.0 #kg/m^3
 # ice strength 
 Pstar = 27.5e3*T**2/L**2/900.0
 #other
-delta_min = 2e-9*T/5
+delta_min = 2e-9*T #2e-9/1e3/T newton failed when line search; stressvel works
 PETSc.Sys.Print("[info] delta_min", delta_min)
 
 # solution vector
@@ -122,6 +122,7 @@ sol_H      = Function(H)
 step_H     = Function(H)
 eta        = Function(Vd1)
 strainrate = Function(Vd)
+delta      = Function(Vd1)
 
 # other vector
 v_ocean = Function(V)
@@ -141,12 +142,12 @@ sol_uprevt.assign(sol_u)
 #bell_r0 = 32; bell_x0 = 256; bell_y0 = 256+96
 #bell = 0.25*(1+cos(math.pi*min_value(sqrt(pow(X[0]-bell_x0, 2) + pow(X[1]-bell_y0, 2))/bell_r0, 1.0)))
 #sol_A.interpolate(1+bell)
-sol_A.project(Constant(1.0))
-
+sol_A.interpolate(Constant(1.0))
 
 # H_0
 #sol_H.interpolate((0.3/L + 0.005/L*(sin(60*X[0]/1e6*L) + sin(30*X[1]/1e6*L)))/G)
 sol_H.interpolate((0.3 + 0.005*(sin(60*X[0]/1e6*L) + sin(30*X[1]/1e6*L)))/G)
+#Abstract.Vector.setValue(sol_H, 0.3/G)
 
 # v_ocean
 v_ocean_max = 0.01*T/L #m/s
@@ -165,15 +166,15 @@ if OUTPUT_VTK_INIT:
 
 ## Weak Form
 # set weak forms of objective functional and gradient
-obj  = WeakForm.objective(sol_u, sol_uprevt, sol_A, sol_H, V, rhoice, 20*dt, Ca, rhoa, v_a, \
+obj  = WeakForm.objective(sol_u, sol_uprevt, sol_A, sol_H, V, rhoice, dt, Ca, rhoa, v_a, \
                          Co, rhoo, v_ocean, delta_min, Pstar, fc)
-grad = WeakForm.gradient(sol_u, sol_uprevt, sol_A, sol_H, V, rhoice, 20*dt, Ca, rhoa, v_a, \
+grad = WeakForm.gradient(sol_u, sol_uprevt, sol_A, sol_H, V, rhoice, dt, Ca, rhoa, v_a, \
                          Co, rhoo, v_ocean, delta_min, Pstar, fc)
 
 # set weak form of Hessian and forms related to the linearization
 if args.linearization == 'stdnewton':
     hess = WeakForm.hessian_NewtonStandard(sol_u, sol_A, sol_H, V, rhoice, \
-               20*dt, Ca, rhoa, v_a, Co, rhoo, v_ocean, delta_min, Pstar, fc)
+               dt, Ca, rhoa, v_a, Co, rhoo, v_ocean, delta_min, Pstar, fc)
 elif args.linearization == 'stressvel':
     if Vd is None:
         raise ValueError("stressvel not implemented for discretisation %s" \
@@ -186,7 +187,7 @@ elif args.linearization == 'stressvel':
     dualStep = WeakForm.hessian_dualStep(sol_u, step_u, S, Vd, delta_min)
     dualres = WeakForm.dualresidual(S, sol_u, Vd, delta_min)
     hess = WeakForm.hessian_NewtonStressvel(sol_u, S_proj, sol_A, sol_H, V, rhoice, \
-               20*dt, Ca, rhoa, v_a, Co, rhoo, v_ocean, delta_min, Pstar, fc)
+               dt, Ca, rhoa, v_a, Co, rhoo, v_ocean, delta_min, Pstar, fc)
 else:
     raise ValueError("unknown type of linearization %s" % args.linearization)
 
@@ -198,9 +199,10 @@ n = FacetNormal(mesh)
 vn = 0.5*(dot(sol_u, n) + abs(dot(sol_u, n)))
 
 a_A = Atr*Ate*dx
-L1 = dtc*(sol_A*inner(sol_u, nabla_grad(Ate))*dx
-     - conditional(dot(sol_u, n) < 0, Ate*dot(sol_u, n)*1.0, 0.0)*ds
-     - conditional(dot(sol_u, n) > 0, Ate*dot(sol_u, n)*sol_A, 0.0)*ds
+L1 = dtc*(
+     sol_A*inner(sol_u, nabla_grad(Ate))*dx
+     #- conditional(dot(sol_u, n) < 0, Ate*dot(sol_u, n)*1.0, 0.0)*ds
+     #- conditional(dot(sol_u, n) > 0, Ate*dot(sol_u, n)*sol_A, 0.0)*ds
      - (Ate('+') - Ate('-'))*(vn('+')*sol_A('+') - vn('-')*sol_A('-'))*dS)
 
 sol_A1 = Function(A); sol_A2 = Function(A)
@@ -218,9 +220,10 @@ Hte = TestFunction(H)
 Htr = TrialFunction(H)
 
 a_H = Htr*Hte*dx
-L1 = dtc*(sol_H*inner(sol_u, nabla_grad(Hte))*dx
-     - conditional(dot(sol_u, n) < 0, Hte*dot(sol_u, n)*0.3/L, 0.0)*ds
-     - conditional(dot(sol_u, n) > 0, Hte*dot(sol_u, n)*sol_H, 0.0)*ds
+L1 = dtc*(
+     sol_H*inner(sol_u, nabla_grad(Hte))*dx
+     #- conditional(dot(sol_u, n) < 0, Hte*dot(sol_u, n)*0.3/L, 0.0)*ds
+     #- conditional(dot(sol_u, n) > 0, Hte*dot(sol_u, n)*sol_H, 0.0)*ds
      - (Hte('+') - Hte('-'))*(vn('+')*sol_H('+') - vn('-')*sol_H('-'))*dS)
 
 sol_H1 = Function(H); sol_H2 = Function(H)
@@ -238,15 +241,25 @@ if args.linearization == 'stressvel':
     #Md = assemble(Vdmassweak)
     Mdinv = assemble(Tensor(Vdmassweak).inv).petscmat
 
+Amassweak = inner(TrialFunction(A), TestFunction(A)) * dx
+Ainv = assemble(Tensor(Amassweak).inv).petscmat
 
 while t < Tfinal - 0.5*dt:
     WeakForm.update_va(mx, my, t, X, v_a, T, L)
     sol_uprevt.assign(sol_u)
 
 	## output
-    if ntstep % 320 == 0:
+    if ntstep % 1 == 0:
         if MONITOR_NL_ITER:
             PETSc.Sys.Print("[{0:2d}] Time: {1:>5.2e}; {2:>5.2e} days; nonlinear iter {3:>3d}".format(ntstep, t, t*1e3/60/60/24, nonlin_it_total))
+            energy  = assemble(0.5*rhoice*900*sol_H*inner(sol_u/T*L, sol_u/T*L)*dx)
+            E = sym(nabla_grad(sol_u))
+            meandiv = assemble(abs(tr(E))*dx)
+            shear = 2*sqrt(-det(dev(E)))
+            meanshear = assemble(shear*dx)
+            meanspeed = assemble(sqrt(inner(sol_u, sol_u))*dx)
+            meandeform = assemble(sqrt(tr(E)*tr(E) + shear*shear)*dx)
+            PETSc.Sys.Print("[{0:2d}] Statistic: {1:>8.4e} {2:>8.4e} {3:>8.4e} {4:>8.4e} {5:>8.4e}".format(ntstep,energy,meandiv,meanshear,meanspeed,meandeform))
         if OUTPUT_VTK:
             eta.interpolate(WeakForm.eta(sol_u, sol_A, sol_H, delta_min, 27.5e3))
 
@@ -255,6 +268,8 @@ while t < Tfinal - 0.5*dt:
             outfile_u.write(sol_u, time=t*T/24/60/60)
             outfile_A.write(sol_A, time=t*T/24/60/60)
             outfile_H.write(sol_H, time=t*T/24/60/60)
+            
+
 
     ### Advance A, H
     solvA1.solve()
@@ -265,6 +280,11 @@ while t < Tfinal - 0.5*dt:
     
     solvA3.solve()
     sol_A.assign((1.0/3.0)*sol_A + (2.0/3.0)*(sol_A2 + step_A))
+    #sol_A.assign(sol_A1)
+    Aprojweak, _ = WeakForm.hessian_dualUpdate_boundMaxMagnitude(sol_A, A, 1.0)
+    with assemble(Aprojweak).dat.vec_ro as v:
+        with sol_A.dat.vec as aproj:
+            Ainv.mult(v, aproj)
 
     solvH1.solve()
     sol_H1.assign(sol_H + step_H)
@@ -274,10 +294,10 @@ while t < Tfinal - 0.5*dt:
     
     solvH3.solve()
     sol_H.assign((1.0/3.0)*sol_H + (2.0/3.0)*(sol_H2 + step_H))
-
+    #sol_H.assign(sol_H1)
 
     ### Solve the momentum equation
-    if ntstep % 20 == 19:
+    if ntstep % 1 == 0 or ntstep == 0:
         # initialize gradient
         g = assemble(grad, bcs=bcstep_u)
         g_norm_init = g_norm = norm(g)
@@ -303,7 +323,8 @@ while t < Tfinal - 0.5*dt:
                       itn, lin_it, obj_val, g_norm, angle_grad_step, Sresnorm, Sprojpercent*100, step_length))
         
             # stop if converged
-            if (g_norm < 1e-13 or np.abs(angle_grad_step) < 1e-16) and itn > 1:
+            #if (g_norm < 1e-13 or np.abs(angle_grad_step) < 1e-16) and itn > 1:
+            if (g_norm < 1e-13) and itn > 1:
                 nlsolve_success = True
                 PETSc.Sys.Print("Stop reason: ||g|| too small; ||g|| reduction %3e." % float(g_norm/g_norm_init))
                 break
@@ -359,7 +380,7 @@ while t < Tfinal - 0.5*dt:
             # compute the norm of the gradient
             g = assemble(grad, bcs=bcstep_u)
             g_norm = norm(g)
-        
+
             # check derivatives
             if NL_CHECK_GRADIENT and itn < 2:
                 perturb_u       = Function(V)
@@ -425,8 +446,6 @@ while t < Tfinal - 0.5*dt:
                 lin_it_total
             )
         )
-        #strainrate.interpolate(sym(nabla_grad(sol_u))) 
-        #outfile_e.write(strainrate, Time = t)
         
         nonlin_it_total += itn
         # stop if nonlinear solve failed
