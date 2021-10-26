@@ -20,6 +20,7 @@ PETSc.Sys.popErrorHandler()
 
 import argparse
 import numpy as np
+import matplotlib.pyplot as plt
 PETSc.Sys.popErrorHandler()
 
 import logging
@@ -53,12 +54,14 @@ G = 1         # 1 m
 ## Output
 OUTPUT_VTK = False
 OUTPUT_VTK_INIT = False
+OUTPUT_YC = True
 if OUTPUT_VTK:
     #outfile_va  = File("/scratch/vtk/"+args.linearization+"/sol_va_ts.pvd")
-    outfile_eta = File("/scratch/vtk/"+args.linearization+"/sol_eta_ts_"+str(L)+".pvd")
-    outfile_A   = File("/scratch/vtk/"+args.linearization+"/sol_A_ts_"+str(L)+".pvd")
-    outfile_H   = File("/scratch/vtk/"+args.linearization+"/sol_H_ts_"+str(L)+".pvd")
-    outfile_u   = File("/scratch/vtk/"+args.linearization+"/sol_u_ts_"+str(L)+".pvd")
+    outfile_eta   = File("/scratch/vtk/"+args.linearization+"/sol_eta_ts_"+str(L)+".pvd")
+    outfile_shear = File("/scratch/vtk/"+args.linearization+"/sol_shear_ts_"+str(L)+".pvd")
+    outfile_A     = File("/scratch/vtk/"+args.linearization+"/sol_A_ts_"+str(L)+".pvd")
+    outfile_H     = File("/scratch/vtk/"+args.linearization+"/sol_H_ts_"+str(L)+".pvd")
+    outfile_u     = File("/scratch/vtk/"+args.linearization+"/sol_u_ts_"+str(L)+".pvd")
 
 #outfile_e   = File("/scratch/vtk/"+args.linearization+"/delta_"+str(L)+".pvd")
 
@@ -71,7 +74,7 @@ mesh = RectangleMesh(Nx, Ny, Lx, Ly, quadrilateral=False)
 PETSc.Sys.Print("[info] dx in km", (512*1000/L)/Nx)
 PETSc.Sys.Print("[info] Nx", Nx)
 
-Tfinal = 6*24*60*60/T #2/T #days
+Tfinal = 2.5*24*60*60/T #2/T #days
 dt = 1.8/4 # 1.8/2 for N=128, 1.8/4 for N=256
 dtc = Constant(dt)
 t   = 0.0
@@ -90,7 +93,7 @@ Helt  = FiniteElement("DG", mesh.ufl_cell(), 0)
 
 V = VectorFunctionSpace(mesh, velt)
 Vd= FunctionSpace(mesh, vdelt)
-Vd1 = FunctionSpace(mesh, "CG", 1)
+Vd1 = FunctionSpace(mesh, "DG", 0)
 A = FunctionSpace(mesh, Aelt)
 H = FunctionSpace(mesh, Helt)
 
@@ -121,8 +124,12 @@ step_A     = Function(A)
 sol_H      = Function(H)
 step_H     = Function(H)
 eta        = Function(Vd1)
+shear      = Function(Vd1)
 strainrate = Function(Vd)
 delta      = Function(Vd1)
+if OUTPUT_YC:
+    sigmaI  = Function(FunctionSpace(mesh, velt))
+    sigmaII = Function(FunctionSpace(mesh, velt))
 
 # other vector
 v_ocean = Function(V)
@@ -255,7 +262,7 @@ while t < Tfinal - 0.5*dt:
             energy  = assemble(0.5*rhoice*900*sol_H*inner(sol_u/T*L, sol_u/T*L)*dx)
             E = sym(nabla_grad(sol_u))
             meandiv = assemble(abs(tr(E))*dx)
-            shear = 2*sqrt(-det(dev(E)))
+            shearweak = 2*sqrt(-det(dev(E)))
             meanshear = assemble(shear*dx)
             meanspeed = assemble(sqrt(inner(sol_u, sol_u))*dx)
             meandeform = assemble(sqrt(tr(E)*tr(E) + shear*shear)*dx)
@@ -263,13 +270,29 @@ while t < Tfinal - 0.5*dt:
         if OUTPUT_VTK:
             eta.interpolate(WeakForm.eta(sol_u, sol_A, sol_H, delta_min, 27.5e3))
 
+            E = sym(nabla_grad(sol_u))
+            meandiv = assemble(abs(tr(E))*dx)
+            shearweak = 2*sqrt(-det(dev(E)))
+            shear.interpolate(shearweak)
+
             outfile_eta.write(eta, time=t*T/24/60/60)
+            outfile_shear.write(shear, time=t*T/24/60/60)
             #outfile_va.write(v_a,  time=t*T/24/60/60)
             outfile_u.write(sol_u, time=t*T/24/60/60)
             outfile_A.write(sol_A, time=t*T/24/60/60)
             outfile_H.write(sol_H, time=t*T/24/60/60)
-            
-
+        if OUTPUT_YC:
+            sigmaI.interpolate(WeakForm.sigmaI(sol_u, sol_A, sol_H, delta_min, Pstar))
+            sigmaII.interpolate(WeakForm.sigmaII(sol_u, sol_A, sol_H, delta_min, Pstar))
+            fig, ax = plt.subplots(figsize=(8,5))
+            ax.scatter(sigmaI.vector()[:], sigmaII.vector()[:], s=0.1)
+            ax.set_xlim(-1,0)
+            x = np.linspace(-1,0,1000)
+            y = np.sqrt(1./4 - (x + 0.5)**2)/2
+            ax.plot(x,y, 'r-')
+            ax.plot(x,-y, 'r-')
+            plt.savefig("stress_"+str(ntstep)+".png")
+            #plt.show()
 
     ### Advance A, H
     solvA1.solve()

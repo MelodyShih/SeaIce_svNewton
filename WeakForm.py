@@ -77,6 +77,21 @@ def applyBoundaryConditions(u, boundary_condition, boundary_condition_type=None)
         bc = createBoundaryConditions(boundary_condition_type, u.function_space())
         applyBoundaryConditions(u, bc)
 
+def sigmaI(u, A, H, delta_min, Pstar):
+	tau_u = tau(u)
+	delta = fd.sqrt(delta_min**2+2*fd.inner(tau_u,tau_u))
+	E = fd.sym(fd.nabla_grad(u))
+	EI = fd.tr(E)
+	return 1./2*(EI/delta-1.0) 
+
+def sigmaII(u, A, H, delta_min, Pstar):
+	e = 2
+	tau_u = tau(u)
+	delta = fd.sqrt(delta_min**2+2*fd.inner(tau_u,tau_u))
+	E = fd.sym(fd.nabla_grad(u))
+	EII = 2*fd.sqrt(-fd.det(fd.dev(E)))
+	return 1./2/delta/e**2*EII 
+
 #=======================================
 # Objective 
 #=======================================
