@@ -52,11 +52,11 @@ L = 1e3       # 1e3 m
 G = 1         # 1 m
 
 ## Output
-OUTPUT_VTK = False
-OUTPUT_VTK_INIT = False
+OUTPUT_VTK = True
+OUTPUT_VTK_INIT = True
 OUTPUT_YC = True
 if OUTPUT_VTK:
-    #outfile_va  = File("/scratch/vtk/"+args.linearization+"/sol_va_ts.pvd")
+    outfile_va    = File("/scratch/vtk/"+args.linearization+"/sol_va_ts.pvd")
     outfile_eta   = File("/scratch/vtk/"+args.linearization+"/sol_eta_ts_"+str(L)+".pvd")
     outfile_shear = File("/scratch/vtk/"+args.linearization+"/sol_shear_ts_"+str(L)+".pvd")
     outfile_A     = File("/scratch/vtk/"+args.linearization+"/sol_A_ts_"+str(L)+".pvd")
@@ -74,8 +74,8 @@ mesh = RectangleMesh(Nx, Ny, Lx, Ly, quadrilateral=False)
 PETSc.Sys.Print("[info] dx in km", (512*1000/L)/Nx)
 PETSc.Sys.Print("[info] Nx", Nx)
 
-Tfinal = 2.5*24*60*60/T #2/T #days
-dt = 1.8/4 # 1.8/2 for N=128, 1.8/4 for N=256
+Tfinal = 2.1*24*60*60/T #2/T #days
+dt = 1.8/15 # 1.8/2 for N=128, 1.8/4 for N=256
 dtc = Constant(dt)
 t   = 0.0
 ntstep = 0
@@ -88,12 +88,12 @@ PETSc.Sys.Print("[info] dt in days", dt*T/24/60/60)
 # H: mean sea ice thickness
 velt  = FiniteElement("CG", mesh.ufl_cell(), 1)
 vdelt = TensorElement("DG", mesh.ufl_cell(), 2)
-Aelt  = FiniteElement("DG", mesh.ufl_cell(), 0)
-Helt  = FiniteElement("DG", mesh.ufl_cell(), 0)
+Aelt  = FiniteElement("DG", mesh.ufl_cell(), 1)
+Helt  = FiniteElement("DG", mesh.ufl_cell(), 1)
 
 V = VectorFunctionSpace(mesh, velt)
 Vd= FunctionSpace(mesh, vdelt)
-Vd1 = FunctionSpace(mesh, "DG", 0)
+Vd1 = FunctionSpace(mesh, "DG", 1)
 A = FunctionSpace(mesh, Aelt)
 H = FunctionSpace(mesh, Helt)
 
@@ -145,6 +145,7 @@ X = SpatialCoordinate(mesh)
 sol_u.project(Constant((0.,)*dim))
 #sol_u.interpolate(as_vector([(2*X[1]-Lx)/Lx,-(2*X[0]-Ly)/Ly]))
 sol_uprevt.assign(sol_u)
+
 # A_0 = 1.0
 #bell_r0 = 32; bell_x0 = 256; bell_y0 = 256+96
 #bell = 0.25*(1+cos(math.pi*min_value(sqrt(pow(X[0]-bell_x0, 2) + pow(X[1]-bell_y0, 2))/bell_r0, 1.0)))
@@ -256,7 +257,7 @@ while t < Tfinal - 0.5*dt:
     sol_uprevt.assign(sol_u)
 
 	## output
-    if ntstep % 1 == 0:
+    if ntstep % 15 == 0:
         if MONITOR_NL_ITER:
             PETSc.Sys.Print("[{0:2d}] Time: {1:>5.2e}; {2:>5.2e} days; nonlinear iter {3:>3d}".format(ntstep, t, t*1e3/60/60/24, nonlin_it_total))
             energy  = assemble(0.5*rhoice*900*sol_H*inner(sol_u/T*L, sol_u/T*L)*dx)
@@ -277,7 +278,7 @@ while t < Tfinal - 0.5*dt:
 
             outfile_eta.write(eta, time=t*T/24/60/60)
             outfile_shear.write(shear, time=t*T/24/60/60)
-            #outfile_va.write(v_a,  time=t*T/24/60/60)
+            outfile_va.write(v_a,  time=t*T/24/60/60)
             outfile_u.write(sol_u, time=t*T/24/60/60)
             outfile_A.write(sol_A, time=t*T/24/60/60)
             outfile_H.write(sol_H, time=t*T/24/60/60)
@@ -290,7 +291,6 @@ while t < Tfinal - 0.5*dt:
             x = np.linspace(-1,0,1000)
             y = np.sqrt(1./4 - (x + 0.5)**2)/2
             ax.plot(x,y, 'r-')
-            ax.plot(x,-y, 'r-')
             plt.savefig("stress_"+str(ntstep)+".png")
             #plt.show()
 
@@ -298,12 +298,12 @@ while t < Tfinal - 0.5*dt:
     solvA1.solve()
     sol_A1.assign(sol_A + step_A)
     
-    solvA2.solve()
-    sol_A2.assign(0.75*sol_A + 0.25*(sol_A1 + step_A))
+    #solvA2.solve()
+    #sol_A2.assign(0.75*sol_A + 0.25*(sol_A1 + step_A))
     
-    solvA3.solve()
-    sol_A.assign((1.0/3.0)*sol_A + (2.0/3.0)*(sol_A2 + step_A))
-    #sol_A.assign(sol_A1)
+    #solvA3.solve()
+    #sol_A.assign((1.0/3.0)*sol_A + (2.0/3.0)*(sol_A2 + step_A))
+    sol_A.assign(sol_A1)
     Aprojweak, _ = WeakForm.hessian_dualUpdate_boundMaxMagnitude(sol_A, A, 1.0)
     with assemble(Aprojweak).dat.vec_ro as v:
         with sol_A.dat.vec as aproj:
@@ -311,13 +311,13 @@ while t < Tfinal - 0.5*dt:
 
     solvH1.solve()
     sol_H1.assign(sol_H + step_H)
-    
-    solvH2.solve()
-    sol_H2.assign(0.75*sol_H + 0.25*(sol_H1 + step_H))
-    
-    solvH3.solve()
-    sol_H.assign((1.0/3.0)*sol_H + (2.0/3.0)*(sol_H2 + step_H))
-    #sol_H.assign(sol_H1)
+    #
+    #solvH2.solve()
+    #sol_H2.assign(0.75*sol_H + 0.25*(sol_H1 + step_H))
+    #
+    #solvH3.solve()
+    #sol_H.assign((1.0/3.0)*sol_H + (2.0/3.0)*(sol_H2 + step_H))
+    sol_H.assign(sol_H1)
 
     ### Solve the momentum equation
     if ntstep % 1 == 0 or ntstep == 0:
@@ -339,6 +339,7 @@ while t < Tfinal - 0.5*dt:
 
         Sresnorm = 0.0
         Sprojpercent = 0.0
+
         for itn in range(NL_SOLVER_MAXITER+1):
             # print iteration line
             if MONITOR_NL_ITER:
@@ -384,8 +385,22 @@ while t < Tfinal - 0.5*dt:
                     Sprojpercent = assemble(S_ind)/Lx/Ly
         
             # assemble linearized system
+            params = {
+                "snes_type": "ksponly",
+                "snes_atol": 1e-6,
+                "snes_rtol": 1e-10,
+                "mat_type": "aij",
+                "pmat_type": "aij",
+                "ksp_type": "preonly",
+                "ksp_rtol": 1.0e-6,
+                "ksp_atol": 1.0e-10,
+                "ksp_max_it": 200,
+                "pc_type": "lu",
+                "pc_factor_mat_solver_type": "mumps",
+            }
             problem = LinearVariationalProblem(hess, grad, step_u, bcs=bcstep_u)
-            solver  = LinearVariationalSolver(problem, options_prefix="ns_")
+            solver  = LinearVariationalSolver(problem, solver_parameters=params,
+                                              options_prefix="ns_")
             solver.solve()
             lin_it=solver.snes.ksp.getIterationNumber()
             lin_it_total += lin_it
