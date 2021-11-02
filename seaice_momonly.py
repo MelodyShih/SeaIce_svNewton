@@ -52,16 +52,16 @@ L = 1e3       # 1e3 m
 G = 1         # 1 m
 
 ## Output
-OUTPUT_VTK = True
-OUTPUT_VTK_INIT = True
+OUTPUT_VTK = False
+OUTPUT_VTK_INIT = False
 OUTPUT_YC = True
 if OUTPUT_VTK:
-    outfile_va    = File("/scratch/vtk/"+args.linearization+"/sol_va_ts.pvd")
-    outfile_eta   = File("/scratch/vtk/"+args.linearization+"/sol_eta_ts_"+str(L)+".pvd")
-    outfile_shear = File("/scratch/vtk/"+args.linearization+"/sol_shear_ts_"+str(L)+".pvd")
-    outfile_A     = File("/scratch/vtk/"+args.linearization+"/sol_A_ts_"+str(L)+".pvd")
-    outfile_H     = File("/scratch/vtk/"+args.linearization+"/sol_H_ts_"+str(L)+".pvd")
-    outfile_u     = File("/scratch/vtk/"+args.linearization+"/sol_u_ts_"+str(L)+".pvd")
+    outfile_va    = File("./vtk/"+args.linearization+"/sol_va_ts.pvd")
+    outfile_eta   = File("./vtk/"+args.linearization+"/sol_eta_ts_"+str(L)+".pvd")
+    outfile_shear = File("./vtk/"+args.linearization+"/sol_shear_ts_"+str(L)+".pvd")
+    outfile_A     = File("./vtk/"+args.linearization+"/sol_A_ts_"+str(L)+".pvd")
+    outfile_H     = File("./vtk/"+args.linearization+"/sol_H_ts_"+str(L)+".pvd")
+    outfile_u     = File("./vtk/"+args.linearization+"/sol_u_ts_"+str(L)+".pvd")
 
 #outfile_e   = File("/scratch/vtk/"+args.linearization+"/delta_"+str(L)+".pvd")
 
@@ -355,6 +355,7 @@ for itn in range(NL_SOLVER_MAXITER+1):
         sol_u.assign(sol_uprev)
     if not step_success:
         sol_u.assign(sol_uprev)
+        #step_length = 1.0
         #sol_u.vector().axpy(-step_length, step_u.vector())
         #obj_val = obj_val_next
         #step_success = True
@@ -371,12 +372,22 @@ PETSc.Sys.Print("%s: #iter %i, ||g|| reduction %3e, (grad,step) reduction %3e, #
 )
 
 
+
 #======================================
 # Output
 #======================================
 
 # output vtk file for solutions
 if OUTPUT_VTK:
-    File("./vtk/"+args.linearization+"/solution_u.pvd").write(sol_u)
-    File("./vtk/"+args.linearization+"/solution_A.pvd").write(sol_A)
-    File("./vtk/"+args.linearization+"/solution_H.pvd").write(sol_H)
+    eta.interpolate(WeakForm.eta(sol_u, sol_A, sol_H, delta_min, 27.5e3))
+    E = sym(nabla_grad(sol_u))
+    meandiv = assemble(abs(tr(E))*dx)
+    shearweak = 2*sqrt(-det(dev(E)))
+    shear.interpolate(shearweak)
+    
+    outfile_eta.write(eta, time=t*T/24/60/60)
+    outfile_shear.write(shear, time=t*T/24/60/60)
+    outfile_va.write(v_a,  time=t*T/24/60/60)
+    outfile_u.write(sol_u, time=t*T/24/60/60)
+    outfile_A.write(sol_A, time=t*T/24/60/60)
+    outfile_H.write(sol_H, time=t*T/24/60/60)

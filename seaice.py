@@ -75,7 +75,7 @@ PETSc.Sys.Print("[info] dx in km", (512*1000/L)/Nx)
 PETSc.Sys.Print("[info] Nx", Nx)
 
 Tfinal = 2.1*24*60*60/T #2/T #days
-dt = 1.8/15 # 1.8/2 for N=128, 1.8/4 for N=256
+dt = 1.8/4 # 1.8/2 for N=128, 1.8/4 for N=256
 dtc = Constant(dt)
 t   = 0.0
 ntstep = 0
@@ -257,7 +257,7 @@ while t < Tfinal - 0.5*dt:
     sol_uprevt.assign(sol_u)
 
 	## output
-    if ntstep % 15 == 0:
+    if ntstep % 4 == 0:
         if MONITOR_NL_ITER:
             PETSc.Sys.Print("[{0:2d}] Time: {1:>5.2e}; {2:>5.2e} days; nonlinear iter {3:>3d}".format(ntstep, t, t*1e3/60/60/24, nonlin_it_total))
             energy  = assemble(0.5*rhoice*900*sol_H*inner(sol_u/T*L, sol_u/T*L)*dx)
@@ -308,6 +308,12 @@ while t < Tfinal - 0.5*dt:
     with assemble(Aprojweak).dat.vec_ro as v:
         with sol_A.dat.vec as aproj:
             Ainv.mult(v, aproj)
+    Ate = TestFunction(A)
+    Abdweak = conditional(lt(sol_A, 0.0), 0.0, sol_A)*Ate*dx
+    with assemble(Abdweak).dat.vec_ro as v:
+        with sol_A.dat.vec as aproj:
+            Ainv.mult(v, aproj)
+    
 
     solvH1.solve()
     sol_H1.assign(sol_H + step_H)
@@ -318,6 +324,12 @@ while t < Tfinal - 0.5*dt:
     #solvH3.solve()
     #sol_H.assign((1.0/3.0)*sol_H + (2.0/3.0)*(sol_H2 + step_H))
     sol_H.assign(sol_H1)
+
+    Hte = TestFunction(H)
+    Hbdweak = conditional(lt(sol_H, 0.0), 0.0, sol_H)*Hte*dx
+    with assemble(Hbdweak).dat.vec_ro as v:
+        with sol_H.dat.vec as hproj:
+            Ainv.mult(v, hproj)
 
     ### Solve the momentum equation
     if ntstep % 1 == 0 or ntstep == 0:
@@ -470,6 +482,7 @@ while t < Tfinal - 0.5*dt:
                 sol_u.assign(sol_uprev)
             if not step_success:
                 sol_u.assign(sol_uprev)
+                #step_length = 1.0
                 #sol_u.vector().axpy(-step_length, step_u.vector())
                 #obj_val = obj_val_next
                 #step_success = True

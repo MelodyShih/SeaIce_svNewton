@@ -43,6 +43,7 @@ def update_va(mx, my, t, X, v_a, T, L):
 		vmax = 15*ws #*T/L #m/s
 		mx.assign(665.6*1000/L-51.2*1000/(24*60*60)*t*T/L)
 		my.assign(665.6*1000/L-51.2*1000/(24*60*60)*t*T/L)
+
 	r = fd.sqrt((mx - X[0])**2 + (my - X[1])**2) 
 	s = 1.0/50*fd.exp(-r/(100*1000)*L)
 	v_a.interpolate(fd.as_vector([s*fd.Constant(vmax)*( fd.cos(a)*(X[0]-mx) + fd.sin(a)*(X[1]-my)), 
@@ -107,7 +108,7 @@ def objective(u, uprev, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o,
 	P  = Pstar*H*fd.exp(-20*(1.0-A))
 	E = fd.sym(fd.nabla_grad(u))
 	I = fd.Identity(2)
-	obj_divsigma = dt*P/2*delta*fd.dx(degree=QUAD_DEG) - dt*P*fd.tr(E)*fd.dx(degree=QUAD_DEG)
+	obj_divsigma = dt*P/2*delta*fd.dx(degree=QUAD_DEG) - dt*0.5*P*fd.tr(E)*fd.dx(degree=QUAD_DEG)
 	obj_rhoHu = 0.5*rho_i*H*fd.inner(u, u)*fd.dx(degree=QUAD_DEG)
 
 	tau_a = tau_atm(C_a, rho_a, v_a)
@@ -157,7 +158,7 @@ def gradient(u, uprev, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o, rho_o, v_o,
 
 	AA = rho_i*H*fd.inner(u, ute)*fd.dx(degree=QUAD_DEG)\
 	     + dt*P/fd.sqrt(delta_min**2 + 2*fd.inner(tau_u, tau_u))*fd.inner(tau_u, tau_ute)*fd.dx(degree=QUAD_DEG)\
-	     - dt*P*fd.tr(Ete)*fd.dx(degree=QUAD_DEG)
+	     - dt*0.5*P*fd.tr(Ete)*fd.dx(degree=QUAD_DEG)
 
 	if (abs(C_o) > 1e-15):
 		AA += -dt*fd.inner(tau_o, ute)*fd.dx(degree=QUAD_DEG)	
@@ -189,7 +190,7 @@ def hessian_NewtonStandard(u, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o,
 	ute = fd.TestFunction(FncSp)
 	er_x_utr  = fd.as_vector([  -utr[1],   utr[0]])
 
-	hess =         rho_i*H*fd.inner(utr,ute)*fd.dx(degree=QUAD_DEG)
+	hess = rho_i*H*fd.inner(utr,ute)*fd.dx(degree=QUAD_DEG)
 
 	# d(sigma)/d(u)
 	P  = Pstar*H*fd.exp(-20*(1.0-A))
