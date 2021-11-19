@@ -18,7 +18,7 @@ df["meandeform"]/=(512*512)
 df["meanshear"]/=(512*512)
 df["meandiv"]/=(512*512)
 print(df)
-df.to_csv("4km_stats.csv", float_format="%.5e")
+df.to_csv("1km_stats.csv", float_format="%.5e")
 
 #if multiplot:
 #    df2 = pd.read_csv('tmp2.txt', header=None)

@@ -1,11 +1,16 @@
 from firedrake import *
+from firedrake.petsc import PETSc
 import math
 import WeakForm
 import Abstract.Vector
 import Abstract.WeakForm
 import Abstract.CheckDerivatives
 
+import argparse
+import numpy as np
+import matplotlib.pyplot as plt
 PETSc.Sys.popErrorHandler()
+
 ##################################################
 ##
 ## Nonlinear eq:
@@ -18,13 +23,6 @@ PETSc.Sys.popErrorHandler()
 ##
 ##################################################
 
-import argparse
-import numpy as np
-import matplotlib.pyplot as plt
-PETSc.Sys.popErrorHandler()
-
-import logging
-#logging.basicConfig(level="INFO")
 
 #======================================
 # Parsing input arguments

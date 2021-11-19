@@ -22,11 +22,11 @@ if multiplot:
 	df3 = pd.concat([df, df2], axis=1)
 	df3.columns = ["newton", "stressvel"]
 	df3.index.name="day"
-	df3.to_csv("2km_smalldt.csv", na_rep=' ')
+	df3.to_csv("2km.csv", na_rep=' ')
 	ax = df3.plot(style='-o', logy=True, markersize=4)
 	ax.set_xlabel(xlabel)
 	ax.legend(["stdnewton", "stressvel"])
-	ax.set_title("mesh size 4km; delta_min = 2e-10", fontsize=12)
+	#ax.set_title("mesh size 4km; delta_min = 2e-10", fontsize=12)
 	ax.set_ylim([2,500]);
 else:
 	df3 = pd.concat([df, df2], axis=1)

@@ -1,11 +1,16 @@
 from firedrake import *
+from firedrake.petsc import PETSc
 import math
 import WeakForm
 import Abstract.Vector
 import Abstract.WeakForm
 import Abstract.CheckDerivatives
 
+import argparse
+import numpy as np
+import matplotlib.pyplot as plt
 PETSc.Sys.popErrorHandler()
+
 ##################################################
 ##
 ## Nonlinear eq:
@@ -18,13 +23,6 @@ PETSc.Sys.popErrorHandler()
 ##
 ##################################################
 
-import argparse
-import numpy as np
-import matplotlib.pyplot as plt
-PETSc.Sys.popErrorHandler()
-
-import logging
-#logging.basicConfig(level="INFO")
 
 #======================================
 # Parsing input arguments
@@ -54,7 +52,7 @@ G = 1         # 1 m
 ## Output
 OUTPUT_VTK = True
 OUTPUT_VTK_INIT = True
-OUTPUT_YC = True
+OUTPUT_YC = False
 if OUTPUT_VTK:
     outfile_va    = File("/scratch/vtk/"+args.linearization+"/sol_va_ts.pvd")
     outfile_eta   = File("/scratch/vtk/"+args.linearization+"/sol_eta_ts_"+str(L)+".pvd")
@@ -70,12 +68,12 @@ if OUTPUT_VTK:
 dim = 2
 Nx = Ny = int(512/2.0)
 Lx = Ly = 512*1000/L
-mesh = RectangleMesh(Nx, Ny, Lx, Ly, quadrilateral=False)
+mesh = RectangleMesh(Nx, Ny, Lx, Ly, quadrilateral=True)
 PETSc.Sys.Print("[info] dx in km", (512*1000/L)/Nx)
 PETSc.Sys.Print("[info] Nx", Nx)
 
-Tfinal = 2.1*24*60*60/T #2/T #days
-dt = 1.8/4 # 1.8/2 for N=128, 1.8/4 for N=256
+Tfinal = 8.1*24*60*60/T #2/T #days
+dt = 1.8 # 1.8/2 for N=128, 1.8/4 for N=256
 dtc = Constant(dt)
 t   = 0.0
 ntstep = 0
@@ -88,12 +86,12 @@ PETSc.Sys.Print("[info] dt in days", dt*T/24/60/60)
 # H: mean sea ice thickness
 velt  = FiniteElement("CG", mesh.ufl_cell(), 1)
 vdelt = TensorElement("DG", mesh.ufl_cell(), 2)
-Aelt  = FiniteElement("DG", mesh.ufl_cell(), 1)
-Helt  = FiniteElement("DG", mesh.ufl_cell(), 1)
+Aelt  = FiniteElement("DG", mesh.ufl_cell(), 0)
+Helt  = FiniteElement("DG", mesh.ufl_cell(), 0)
 
 V = VectorFunctionSpace(mesh, velt)
 Vd= FunctionSpace(mesh, vdelt)
-Vd1 = FunctionSpace(mesh, "DG", 1)
+Vd1 = FunctionSpace(mesh, "DG", 0)
 A = FunctionSpace(mesh, Aelt)
 H = FunctionSpace(mesh, Helt)
 
@@ -257,16 +255,16 @@ while t < Tfinal - 0.5*dt:
     sol_uprevt.assign(sol_u)
 
 	## output
-    if ntstep % 4 == 0:
+    if ntstep % 1 == 0:
         if MONITOR_NL_ITER:
             PETSc.Sys.Print("[{0:2d}] Time: {1:>5.2e}; {2:>5.2e} days; nonlinear iter {3:>3d}".format(ntstep, t, t*1e3/60/60/24, nonlin_it_total))
             energy  = assemble(0.5*rhoice*900*sol_H*inner(sol_u/T*L, sol_u/T*L)*dx)
             E = sym(nabla_grad(sol_u))
             meandiv = assemble(abs(tr(E))*dx)
             shearweak = 2*sqrt(-det(dev(E)))
-            meanshear = assemble(shear*dx)
+            meanshear = assemble(shearweak*dx)
             meanspeed = assemble(sqrt(inner(sol_u, sol_u))*dx)
-            meandeform = assemble(sqrt(tr(E)*tr(E) + shear*shear)*dx)
+            meandeform = assemble(sqrt(tr(E)*tr(E) + shearweak*shearweak)*dx)
             PETSc.Sys.Print("[{0:2d}] Statistic: {1:>8.4e} {2:>8.4e} {3:>8.4e} {4:>8.4e} {5:>8.4e}".format(ntstep,energy,meandiv,meanshear,meanspeed,meandeform))
         if OUTPUT_VTK:
             eta.interpolate(WeakForm.eta(sol_u, sol_A, sol_H, delta_min, 27.5e3))
@@ -285,7 +283,7 @@ while t < Tfinal - 0.5*dt:
         if OUTPUT_YC:
             sigmaI.interpolate(WeakForm.sigmaI(sol_u, sol_A, sol_H, delta_min, Pstar))
             sigmaII.interpolate(WeakForm.sigmaII(sol_u, sol_A, sol_H, delta_min, Pstar))
-            fig, ax = plt.subplots(figsize=(8,5))
+            fig, ax = plt.subplots(figsize=(10,5))
             ax.scatter(sigmaI.vector()[:], sigmaII.vector()[:], s=0.1)
             ax.set_xlim(-1,0)
             x = np.linspace(-1,0,1000)
