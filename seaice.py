@@ -50,8 +50,8 @@ L = 1e3       # 1e3 m
 G = 1         # 1 m
 
 ## Output
-OUTPUT_VTK = True
-OUTPUT_VTK_INIT = True
+OUTPUT_VTK = False
+OUTPUT_VTK_INIT = False
 OUTPUT_YC = False
 if OUTPUT_VTK:
     outfile_va    = File("/scratch/vtk/"+args.linearization+"/sol_va_ts.pvd")
@@ -65,14 +65,19 @@ if OUTPUT_VTK:
 
 
 ## Domain: (0,1)x(0,1)
+distp = {"partition": True, "overlap_type": (DistributedMeshOverlapType.VERTEX, 1)}
 dim = 2
-Nx = Ny = int(512/2.0)
+Nx = Ny = int(512/4.0)
 Lx = Ly = 512*1000/L
-mesh = RectangleMesh(Nx, Ny, Lx, Ly, quadrilateral=True)
-PETSc.Sys.Print("[info] dx in km", (512*1000/L)/Nx)
+basemesh = RectangleMesh(Nx, Ny, Lx, Ly, distribution_parameters=distp, quadrilateral=False)
+nref = 1
+mh = MeshHierarchy(basemesh, nref, reorder=True,
+                   distribution_parameters=distp)
+mesh = mh[-1]
+PETSc.Sys.Print("[info] dx in km", (512*1000/L)/Nx/2**nref)
 PETSc.Sys.Print("[info] Nx", Nx)
 
-Tfinal = 8.1*24*60*60/T #2/T #days
+Tfinal = 2.1*24*60*60/T #2/T #days
 dt = 1.8 # 1.8/2 for N=128, 1.8/4 for N=256
 dtc = Constant(dt)
 t   = 0.0
@@ -197,6 +202,8 @@ elif args.linearization == 'stressvel':
 else:
     raise ValueError("unknown type of linearization %s" % args.linearization)
 
+transfer = firedrake.TransferManager()
+
 # set weak form of convergence law for A
 Ate = TestFunction(A)
 Atr = TrialFunction(A)
@@ -216,6 +223,7 @@ L2 = replace(L1, {sol_A: sol_A1}); L3 = replace(L1, {sol_A: sol_A2})
 
 probA1 = LinearVariationalProblem(a_A, L1, step_A)
 solvA1 = LinearVariationalSolver(probA1)
+solvA1.set_transfer_manager(transfer)
 probA2 = LinearVariationalProblem(a_A, L2, step_A)
 solvA2 = LinearVariationalSolver(probA2)
 probA3 = LinearVariationalProblem(a_A, L3, step_A)
@@ -237,6 +245,7 @@ L2 = replace(L1, {sol_H: sol_H1}); L3 = replace(L1, {sol_H: sol_H2})
 
 probH1 = LinearVariationalProblem(a_H, L1, step_H)
 solvH1 = LinearVariationalSolver(probH1)
+solvH1.set_transfer_manager(transfer)
 probH2 = LinearVariationalProblem(a_H, L2, step_H)
 solvH2 = LinearVariationalSolver(probH2)
 probH3 = LinearVariationalProblem(a_H, L3, step_H)
@@ -250,7 +259,7 @@ if args.linearization == 'stressvel':
 Amassweak = inner(TrialFunction(A), TestFunction(A)) * dx
 Ainv = assemble(Tensor(Amassweak).inv).petscmat
 
-while t < Tfinal - 0.5*dt:
+while t < Tfinal - 0.5*dt and ntstep == 0:
     WeakForm.update_va(mx, my, t, X, v_a, T, L)
     sol_uprevt.assign(sol_u)
 
@@ -330,7 +339,7 @@ while t < Tfinal - 0.5*dt:
             Ainv.mult(v, hproj)
 
     ### Solve the momentum equation
-    if ntstep % 1 == 0 or ntstep == 0:
+    if ntstep % 1 == 0:
         # initialize gradient
         g = assemble(grad, bcs=bcstep_u)
         g_norm_init = g_norm = norm(g)
@@ -395,22 +404,56 @@ while t < Tfinal - 0.5*dt:
                     Sprojpercent = assemble(S_ind)/Lx/Ly
         
             # assemble linearized system
+            mg_levels_solver_patch = {
+                #"ksp_monitor_true_residual": None,
+                "ksp_type": "fgmres",
+                "ksp_norm_type": "unpreconditioned",
+                "ksp_max_it": 5,
+                "pc_type": "python",
+                "pc_python_type": "firedrake.ASMStarPC",
+                "pc_star_construct_dim": 0,
+                "pc_star_backend": "petscasm",
+                "pc_star_sub_sub_pc_factor_in_place": None,
+            }
+            mg_levels_solver = {
+                "ksp_type": "fgmres",
+                "ksp_max_it": 10,
+                "ksp_norm_type": "unpreconditioned",
+                #"ksp_view": None,
+                #"ksp_monitor_true_residual": None,
+                #"pc_type": "bjacobi",
+            }
             params = {
                 "snes_type": "ksponly",
-                "snes_atol": 1e-6,
-                "snes_rtol": 1e-10,
-                "mat_type": "aij",
-                "pmat_type": "aij",
-                "ksp_type": "preonly",
-                "ksp_rtol": 1.0e-6,
+                "snes_rtol": 1e-4,
+                "snes_atol": 1e-10,
+                #"mat_type": "aij",
+                #"pmat_type": "aij",
+                "ksp_rtol": 1.0e-4,
                 "ksp_atol": 1.0e-10,
-                "ksp_max_it": 200,
-                "pc_type": "lu",
-                "pc_factor_mat_solver_type": "mumps",
+                "ksp_max_it": 500,
+                #"ksp_monitor_true_residual": None,
+                #"ksp_converged_reason": None,
+                #"ksp_type": "preonly",
+                #"pc_type": "lu",
+                #"pc_factor_mat_solver_type": "mumps",
+                #"ksp_view": None,
+                "ksp_type": "fgmres",
+                "ksp_gmres_restart": 200,
+                "pc_type": "mg",
+                #"pc_mg_type": "full",
+                #"pc_mg_type": "multiplicative",
+                "pc_mg_cycle_type": "v",
+                "mg_levels": mg_levels_solver,
+                "mg_coarse_pc_type": "python",
+                "mg_coarse_pc_python_type": "firedrake.AssembledPC",
+                "mg_coarse_assembled_pc_type": "lu",
+                "mg_coarse_assembled_pc_factor_mat_solver_type": "mumps",
             }
             problem = LinearVariationalProblem(hess, grad, step_u, bcs=bcstep_u)
             solver  = LinearVariationalSolver(problem, solver_parameters=params,
                                               options_prefix="ns_")
+            solver.set_transfer_manager(transfer)
             solver.solve()
             lin_it=solver.snes.ksp.getIterationNumber()
             lin_it_total += lin_it
