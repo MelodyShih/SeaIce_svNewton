@@ -251,7 +251,7 @@ solvH2 = LinearVariationalSolver(probH2)
 probH3 = LinearVariationalProblem(a_H, L3, step_H)
 solvH3 = LinearVariationalSolver(probH3)
 
-if args.linearization == 'stressvel':
+if args.linearization == 'stressvel' or args.linearization == 'stressvelsym':
     Vdmassweak = inner(TrialFunction(Vd), TestFunction(Vd)) * dx
     #Md = assemble(Vdmassweak)
     Mdinv = assemble(Tensor(Vdmassweak).inv).petscmat
@@ -387,7 +387,7 @@ while t < Tfinal - 0.5*dt and ntstep == 0:
                 break
         
             # set up the linearized system
-            if args.linearization == 'stressvel':
+            if args.linearization == 'stressvel' or args.linearization == 'stressvelsym':
                 if 0 == itn and nonlin_it_total == 0:
                     Abstract.Vector.setZero(S)
                     Abstract.Vector.setZero(S_step)
@@ -459,7 +459,7 @@ while t < Tfinal - 0.5*dt and ntstep == 0:
             lin_it_total += lin_it
         
             # solve dual variable step
-            if args.linearization == 'stressvel':
+            if args.linearization == 'stressvel' or args.linearization == 'stressvelsym':
                 Abstract.Vector.scale(step_u, -1.0)
                 b = assemble(dualStep)
                 #solve(Md, S_step.vector(), b)
@@ -514,7 +514,7 @@ while t < Tfinal - 0.5*dt and ntstep == 0:
                    PETSc.Sys.Print("Step search: {0:>2d}{1:>10f}{2:>20.12e}{3:>20.12e}".format(
                          j, step_length, obj_val_next, obj_val))
                 if obj_val_next < obj_val + step_length*NL_SOLVER_STEP_ARMIJO*angle_grad_step:
-                    if args.linearization == 'stressvel':
+                    if args.linearization == 'stressvel' or args.linearization == 'stressvelsym':
                         S.vector().axpy(step_length, S_step.vector())
                     obj_val = obj_val_next
                     step_success = True

@@ -13,23 +13,23 @@ import numpy as np
 import math
 import sys
 
-QUAD_DEG=10
+QUAD_DEG=15
 
 def delta(u):
 	tau_u   = tau(u)
 	delta  = 2*fd.inner(tau_u,tau_u)
-	return delta 
+	return delta
 
 def eta(u, A, H, delta_min, Pstar):
 	e = 2
 	tau_u   = tau(u)
 	delta  = fd.sqrt(delta_min**2+2*fd.inner(tau_u,tau_u))
 	P  = Pstar*H*fd.exp(-20*(1.0-A))
-	return 1.0/e**2*P/2/delta 
+	return 1.0/e**2*P/2/delta
 
 def update_va(mx, my, t, X, v_a, T, L):
 	tday = t*T/24/60/60
-	if tday <= 4: 
+	if tday <= 4:
 		a = 72./180*np.pi
 		ws = -math.tanh((4-tday)*(4+tday)/2)
 		#ws = -math.tanh(tday*(8.0-tday)/2.0)
@@ -44,9 +44,9 @@ def update_va(mx, my, t, X, v_a, T, L):
 		mx.assign(665.6*1000/L-51.2*1000/(24*60*60)*t*T/L)
 		my.assign(665.6*1000/L-51.2*1000/(24*60*60)*t*T/L)
 
-	r = fd.sqrt((mx - X[0])**2 + (my - X[1])**2) 
+	r = fd.sqrt((mx - X[0])**2 + (my - X[1])**2)
 	s = 1.0/50*fd.exp(-r/(100*1000)*L)
-	v_a.interpolate(fd.as_vector([s*fd.Constant(vmax)*( fd.cos(a)*(X[0]-mx) + fd.sin(a)*(X[1]-my)), 
+	v_a.interpolate(fd.as_vector([s*fd.Constant(vmax)*( fd.cos(a)*(X[0]-mx) + fd.sin(a)*(X[1]-my)),
 	                              s*fd.Constant(vmax)*(-fd.sin(a)*(X[0]-mx) + fd.cos(a)*(X[1]-my))]))
 
 def tau_atm(C_a, rho_a, v_a):
@@ -83,7 +83,7 @@ def sigmaI(u, A, H, delta_min, Pstar):
 	delta = fd.sqrt(delta_min**2+2*fd.inner(tau_u,tau_u))
 	E = fd.sym(fd.nabla_grad(u))
 	EI = fd.tr(E)
-	return 1./2*(EI/delta-1.0) 
+	return 1./2*(EI/delta-1.0)
 
 def sigmaII(u, A, H, delta_min, Pstar):
 	e = 2
@@ -91,16 +91,16 @@ def sigmaII(u, A, H, delta_min, Pstar):
 	delta = fd.sqrt(delta_min**2+2*fd.inner(tau_u,tau_u))
 	E = fd.sym(fd.nabla_grad(u))
 	EII = 2*fd.sqrt(-fd.det(fd.dev(E)))
-	return 1./2/delta/e**2*EII 
+	return 1./2/delta/e**2*EII
 
 #=======================================
-# Objective 
+# Objective
 #=======================================
-def objective(u, uprev, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o, 
+def objective(u, uprev, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o,
               rho_o, v_o, delta_min, Pstar, f_c):
 	'''
 	Creates the weak form for the objective functional:
-	
+
 	where
 	'''
 	tau_u   = tau(u)
@@ -123,20 +123,20 @@ def objective(u, uprev, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o,
 		obj -= obj_ocean
 
 	return obj
-        
+
 #=======================================
 # Linearization
 #=======================================
 
-def gradient(u, uprev, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o, rho_o, v_o, 
+def gradient(u, uprev, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o, rho_o, v_o,
              delta_min, Pstar, f_c):
 	'''
-	Creates the weak form for the gradient:
-	
-	    F(ute) - A(u, ute) = 
-	    \int rho_ice*H_n*uprev*ute + dt*tau_atm(t_n)*ute + 
+	Creates the weak form for the gradient (nonlinear residual):
+
+	    F(ute) - A(u, ute) =
+	    \int rho_ice*H_n*uprev*ute + dt*tau_atm(t_n)*ute +
 	                               + dt*rho_ice*H_n*f_c*(e_r x v_ocean)*ute
-	    - 
+	    -
 	    \int rho_ice*H_n*u*ute + dt*rho_ice*H_n*f_c*(e_r x u)*ute
 	                           + dt*sigma_n(A_n,H_n,u)*grad(ute)
 	                           - dt*tau_ocean(t_n, u)*ute
@@ -144,7 +144,7 @@ def gradient(u, uprev, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o, rho_o, v_o,
 	    ute = u_test = TestFunction of the velocity space
 	'''
 	ute = fd.TestFunction(FncSp)
-	    
+
 	tau_a = tau_atm(C_a, rho_a, v_a)
 	tau_o = tau_ocean(C_o, rho_o, u, v_o)
 
@@ -161,13 +161,13 @@ def gradient(u, uprev, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o, rho_o, v_o,
 	     - dt*0.5*P*fd.tr(Ete)*fd.dx(degree=QUAD_DEG)
 
 	if (abs(C_o) > 1e-15):
-		AA += -dt*fd.inner(tau_o, ute)*fd.dx(degree=QUAD_DEG)	
+		AA += -dt*fd.inner(tau_o, ute)*fd.dx(degree=QUAD_DEG)
 
 	# Coriolis:
 	if (abs(f_c) > 1e-15):
 	    er_x_vo = fd.as_vector([-v_o[1], v_o[0]])
 	    er_x_u  = fd.as_vector([  -u[1],   u[0]])
-	    F  += dt*rho_i*H*f_c*fd.inner(er_x_vo, ute)*fd.dx(degree=QUAD_DEG) 
+	    F  += dt*rho_i*H*f_c*fd.inner(er_x_vo, ute)*fd.dx(degree=QUAD_DEG)
 	    AA += dt*rho_i*H*f_c*fd.inner(er_x_u , ute)*fd.dx(degree=QUAD_DEG)
 
 
@@ -175,12 +175,12 @@ def gradient(u, uprev, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o, rho_o, v_o,
 
 	return grad
 
-def hessian_NewtonStandard(u, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o, 
+def hessian_NewtonStandard(u, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o,
 	                       rho_o, v_o, delta_min, Pstar, f_c):
 	'''
 	Creates the weak form for the Hessian of the standard Newton linearization:
-	
-	    A'(u)(w, ute) = #TODO: need to update 
+
+	    A'(u)(w, ute) = #TODO: need to update
 
 	where
 	    utr = u_trial = TrialFunction of the velocity space
@@ -196,10 +196,10 @@ def hessian_NewtonStandard(u, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o,
 	P  = Pstar*H*fd.exp(-20*(1.0-A))
 	tau_u   = tau(u)
 	tau_ute = tau(ute)
-	tau_utr = tau(utr) 
+	tau_utr = tau(utr)
 	delta  = fd.sqrt(delta_min**2+2*fd.inner(tau_u,tau_u))
 	dsigmadu =         P/delta*fd.inner(tau_utr,tau_ute)*fd.dx(degree=QUAD_DEG) + \
-	           -(P/delta**3)*2*fd.inner(tau_u  ,tau_utr)*fd.inner(tau_u,tau_ute)*fd.dx(degree=QUAD_DEG) 
+	           -(P/delta**3)*2*fd.inner(tau_u  ,tau_utr)*fd.inner(tau_u,tau_ute)*fd.dx(degree=QUAD_DEG)
 
 	hess += dt*dsigmadu
 
@@ -212,14 +212,14 @@ def hessian_NewtonStandard(u, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o,
 	# Coriolis:
 	if (abs(f_c) > 1e-15):
 	    hess += dt*rho_i*H*f_c*fd.inner(er_x_utr,ute)*fd.dx(degree=QUAD_DEG)
-           
+
 	return hess
 
-def hessian_NewtonStressvel(u, S, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o, 
+def hessian_NewtonStressvel(u, S, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o,
 	                       rho_o, v_o, delta_min, Pstar, f_c):
 	'''
 	Creates the weak form for the Hessian of the stress-vel Newton linearization:
-	
+
 	#TODO: need to update
 
 	'''
@@ -233,10 +233,10 @@ def hessian_NewtonStressvel(u, S, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o,
 	P  = Pstar*H*fd.exp(-20*(1.0-A))
 	tau_u   = tau(u)
 	tau_ute = tau(ute)
-	tau_utr = tau(utr) 
+	tau_utr = tau(utr)
 	delta = fd.sqrt(delta_min**2+2*fd.inner(tau_u,tau_u))
 	dsigmadu =         P/delta*fd.inner(tau_utr,tau_ute)*fd.dx(degree=QUAD_DEG)\
-	           -(P/delta**2)*2*fd.inner(tau_u  ,tau_utr)*fd.inner(S,tau_ute)*fd.dx(degree=QUAD_DEG) 
+	           -(P/delta**2)*2*fd.inner(tau_u  ,tau_utr)*fd.inner(S,tau_ute)*fd.dx(degree=QUAD_DEG)
 
 	hess += dt*dsigmadu
 
@@ -251,6 +251,44 @@ def hessian_NewtonStressvel(u, S, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o,
 	    hess += rho_i*H*f_c*fd.inner(er_x_utr,ute)*fd.dx(degree=QUAD_DEG)
 
 	return hess
+
+def hessian_NewtonStressvel_Sym(u, S, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o,
+                         rho_o, v_o, delta_min, Pstar, f_c):
+  '''
+  Creates the weak form for the Hessian of the stress-vel Newton linearization:
+
+  #TODO: need to update
+
+  '''
+  utr = fd.TrialFunction(FncSp)
+  ute = fd.TestFunction(FncSp)
+  er_x_utr  = fd.as_vector([  -utr[1],   utr[0]])
+
+  hess = rho_i*H*fd.inner(utr,ute)*fd.dx(degree=QUAD_DEG)
+
+  # d(sigma)/d(u)
+  P  = Pstar*H*fd.exp(-20*(1.0-A))
+  tau_u   = tau(u)
+  tau_ute = tau(ute)
+  tau_utr = tau(utr)
+  delta = fd.sqrt(delta_min**2+2*fd.inner(tau_u,tau_u))
+  dsigmadu =         P/delta*fd.inner(tau_utr,tau_ute)*fd.dx(degree=QUAD_DEG)\
+             -(P/delta**2)*2*0.5*(fd.inner(tau_u,tau_utr)*fd.inner(S,tau_ute)+fd.inner(S,tau_utr)*fd.inner(tau_u,tau_ute))*fd.dx(degree=QUAD_DEG)
+
+  hess += dt*dsigmadu
+
+  # dtau_ocean/du
+  if (abs(C_o) > 1e-15):
+    dtauodu = -rho_o*C_o*fd.sqrt(fd.inner(v_o-u, v_o-u))*fd.inner(utr,ute)*fd.dx(degree=QUAD_DEG) + \
+              -rho_o*C_o/fd.sqrt(fd.inner(v_o-u, v_o-u))*fd.inner(v_o-u,utr)*fd.inner(v_o-u,ute)*fd.dx(degree=QUAD_DEG)
+    hess -= dt*dtauodu
+
+  # Coriolis:
+  if (abs(f_c) > 1e-15):
+      hess += rho_i*H*f_c*fd.inner(er_x_utr,ute)*fd.dx(degree=QUAD_DEG)
+
+  return hess
+
 
 def hessian_dualStep(u, ustep, S, DualFncSp, delta_min):
 	'''
@@ -267,9 +305,24 @@ def hessian_dualStep(u, ustep, S, DualFncSp, delta_min):
                 + 1.0/delta*fd.inner(tau_ustep+tau_u, Ste)*fd.dx(degree=QUAD_DEG)
 	return S_step
 
+def hessian_dualStep_Sym(u, ustep, S, DualFncSp, delta_min):
+	'''
+	Creates the weak form for step of dual variable
+	'''
+	Ste = fd.TestFunction(DualFncSp)
+
+	tau_u     = tau(u)
+	tau_ustep = tau(ustep)
+	delta     = fd.sqrt(delta_min**2+2*fd.inner(tau_u,tau_u))
+	delta_sq  = delta_min**2+2*fd.inner(tau_u,tau_u)
+	S_step    = - fd.inner(S,Ste)*fd.dx(degree=QUAD_DEG)\
+                - 2.0/delta_sq*fd.inner(tau_ustep, tau_u)*fd.inner(S,Ste)*fd.dx(degree=QUAD_DEG)\
+                + 1.0/delta*fd.inner(tau_ustep+tau_u, Ste)*fd.dx(degree=QUAD_DEG)
+	return S_step
+
 def dualresidual(S, u, DualFncSp, delta_min):
 	'''
-	Creates the weak form for residual of dual variable 
+	Creates the weak form for residual of dual variable
 	'''
 	Ste   = fd.TestFunction(DualFncSp)
 	tau_u = tau(u)
