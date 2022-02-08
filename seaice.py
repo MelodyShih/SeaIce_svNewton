@@ -91,13 +91,40 @@ mesh = mh[-1]
 PETSc.Sys.Print("[info] dx in km", (512*1000/L)/Nx/2**nref)
 PETSc.Sys.Print("[info] Nx", Nx)
 
-Tfinal = 2.1*24*60*60/T #2/T #days
+Tfinal = 4.1*24*60*60/T #2/T #days
 dt = 1.8 # 1.8/2 for N=128, 1.8/4 for N=256
-dtc = Constant(dt)
+if nref == 0:
+    # mesh size = 4km
+    dtc = Constant(dt)
+    dtt = dt
+    ntrans = 1
+elif nref == 1:
+    # mesh size = 2km
+    dtc = Constant(dt)
+    dtt = dt
+    ntrans = 1
+elif nref == 2:
+    # mesh size = 1km
+    dtc = Constant(dt/2)
+    dtt = dt/2
+    ntrans = 2
+elif nref == 3:
+    # mesh size = 0.5km
+    dtc = Constant(dt/4)
+    dtt = dt/4
+    ntrans = 4
+elif nref == 4:
+    # mesh size = 0.25km
+    dtc = Constant(dt/8)
+    dtt = dt/8
+    ntrans = 8
+else:
+    raise ValueError("unknown nref %d" % nref)
 t   = 0.0
 ntstep = 0
 PETSc.Sys.Print("[info] Tfinal in days", Tfinal*T/24/60/60)
-PETSc.Sys.Print("[info] dt in days", dt*T/24/60/60)
+PETSc.Sys.Print("[info] newton dt in days", dt*T/24/60/60)
+PETSc.Sys.Print("[info] transport dt in days", dtt*T/24/60/60)
 
 ## Discretization: 
 # v: sea ice velocity
@@ -360,11 +387,12 @@ if args.linearization == 'stressvel' or args.linearization == 'stressvelsym':
 Amassweak = inner(TrialFunction(A), TestFunction(A)) * dx
 Ainv = assemble(Tensor(Amassweak).inv).petscmat
 
-while t < Tfinal - 0.5*dt and ntstep == 0:
+
+while t < Tfinal - 0.5*dtt:
     WeakForm.update_va(mx, my, t, X, v_a, T, L)
     sol_uprevt.assign(sol_u)
 
-	## output
+    ## output
     if ntstep % 1 == 0:
         if MONITOR_NL_ITER:
             PETSc.Sys.Print("[{0:2d}] Time: {1:>5.2e}; {2:>5.2e} days; nonlinear iter {3:>3d}".format(ntstep, t, t*1e3/60/60/24, nonlin_it_total))
@@ -440,7 +468,7 @@ while t < Tfinal - 0.5*dt and ntstep == 0:
             Ainv.mult(v, hproj)
 
     ### Solve the momentum equation
-    if ntstep % 1 == 0:
+    if ntstep % ntrans == 0:
         # initialize gradient
         g = assemble(grad, bcs=bcstep_u)
         g_norm_init = g_norm = norm(g)
@@ -600,7 +628,7 @@ while t < Tfinal - 0.5*dt and ntstep == 0:
             PETSc.Sys.Print("[{0:2d}] Failed solving momentum equation".format(ntstep))
             break
 
-    t += dt
+    t += dtt
     ntstep += 1
 
 #======================================
