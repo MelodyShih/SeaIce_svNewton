@@ -37,7 +37,7 @@ args, _ = parser.parse_known_args()
 #======================================
 ## nolinear solver parameters
 NL_CHECK_GRADIENT = False
-NL_CHECK_HESSIAN = True
+NL_CHECK_HESSIAN = False
 MONITOR_NL_ITER = True
 MONITOR_NL_STEPSEARCH = False
 NL_SOLVER_GRAD_RTOL = 1e-4
@@ -235,7 +235,7 @@ elif args.linearization == 'stressvel':
                                    % vvstokesprob.discretisation)
     S      = Function(Vd)
     S_step = Function(Vd)
-    S_proj = Function(Vd)
+    #S_proj = Function(Vd)
     S_prev = Function(Vd)
 
     dualStep = WeakForm.hessian_dualStep(sol_u, step_u, S, Vd, delta_min)
@@ -248,7 +248,7 @@ elif args.linearization == 'stressvelsym':
                                    % vvstokesprob.discretisation)
     S      = Function(Vd)
     S_step = Function(Vd)
-    S_proj = Function(Vd)
+    #S_proj = Function(Vd)
     S_prev = Function(Vd)
 
     dualStep = WeakForm.hessian_dualStep_Sym(sol_u, step_u, S, Vd, delta_min)
@@ -305,7 +305,7 @@ elif args.solver == 'amg':
         "ksp_atol": 1.0e-10,
         "ksp_max_it": 300,
         #"ksp_monitor_true_residual": None,
-        "ksp_converged_reason": None,
+        #"ksp_converged_reason": None,
         "ksp_type": "fgmres",
         "ksp_gmres_restart": 300,
         "pc_type": "hypre",
@@ -523,15 +523,16 @@ while t < Tfinal - 0.5*dtt:
                 if 0 == itn and nonlin_it_total == 0:
                     Abstract.Vector.setZero(S)
                     Abstract.Vector.setZero(S_step)
-                    Abstract.Vector.setZero(S_proj)
+                    #Abstract.Vector.setZero(S_proj)
                 else:
                     # project S to unit sphere
-                    Sprojweak, S_ind = WeakForm.hessian_dualUpdate_boundMaxMagnitude(S, Vd, sqrt(0.5))
-                    with assemble(Sprojweak).dat.vec_ro as v:
-                        with S_proj.dat.vec as sproj:
-                            Mdinv.mult(v, sproj)
+                    #Sprojweak, S_ind = WeakForm.hessian_dualUpdate_boundMaxMagnitude(S, Vd, sqrt(0.5))
+                    #with assemble(Sprojweak).dat.vec_ro as v:
+                    #    with S_proj.dat.vec as sproj:
+                    #        Mdinv.mult(v, sproj)
                     #b = assemble(Sprojweak)
                     #solve(Md, S_proj.vector(), b)
+                    _, S_ind = WeakForm.hessian_dualUpdate_boundMaxMagnitude(S, Vd, sqrt(0.5))
                     Sresnorm     = norm(assemble(dualres))
                     Sprojpercent = assemble(S_ind)/Lx/Ly
         
