@@ -240,8 +240,8 @@ elif args.linearization == 'stressvel':
 
     dualStep = WeakForm.hessian_dualStep(sol_u, step_u, S, Vd, delta_min)
     dualres = WeakForm.dualresidual(S, sol_u, Vd, delta_min)
-    hess = WeakForm.hessian_NewtonStressvel(sol_u, S_proj, sol_A, sol_H, V, rhoice, \
-               dt, Ca, rhoa, v_a, Co, rhoo, v_ocean, delta_min, Pstar, fc)
+    hess = WeakForm.hessian_NewtonStressvel(sol_u, S, sol_A, sol_H, V, rhoice, \
+               dt, Ca, rhoa, v_a, Co, rhoo, v_ocean, delta_min, Pstar, fc, math.sqrt(0.5))
 elif args.linearization == 'stressvelsym':
     if Vd is None:
         raise ValueError("stressvel not implemented for discretisation %s" \
@@ -253,8 +253,8 @@ elif args.linearization == 'stressvelsym':
 
     dualStep = WeakForm.hessian_dualStep_Sym(sol_u, step_u, S, Vd, delta_min)
     dualres = WeakForm.dualresidual(S, sol_u, Vd, delta_min)
-    hess = WeakForm.hessian_NewtonStressvel_Sym(sol_u, S_proj, sol_A, sol_H, V, rhoice, \
-               dt, Ca, rhoa, v_a, Co, rhoo, v_ocean, delta_min, Pstar, fc)
+    hess = WeakForm.hessian_NewtonStressvel_Sym(sol_u, S, sol_A, sol_H, V, rhoice, \
+               dt, Ca, rhoa, v_a, Co, rhoo, v_ocean, delta_min, Pstar, fc, math.sqrt(0.5))
 else:
     raise ValueError("unknown type of linearization %s" % args.linearization)
 
@@ -587,9 +587,9 @@ while t < Tfinal - 0.5*dtt:
                     Hess = assemble(hess)
                     R = FunctionSpace(mesh, 'R', 0)
                     steplength = Function(R)
-                    res = WeakForm.nonlinearres_NewtonStressvel(sol_u, sol_uprevt, V, S, Vd, sol_A, \
+                    res = WeakForm.nonlinearres_NewtonStressvel_notau(sol_u, sol_uprevt, V, S, Vd, sol_A, \
                               sol_H, rhoice, dt, Ca, rhoa, v_a, Co, rhoo, v_ocean, delta_min, \
-                              Pstar, fc, steplength, perturb_uscaled)
+                              Pstar, fc, math.sqrt(0.5), steplength, perturb_uscaled)
                     Abstract.CheckDerivatives.hessian(Hess, res, sol_u, steplength,
                                                       perturb_u, n_checks=6)
         
