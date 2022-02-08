@@ -52,14 +52,14 @@ G = 1         # 1 m
 ## Output
 OUTPUT_VTK = False
 OUTPUT_VTK_INIT = False
-OUTPUT_YC = True
+OUTPUT_YC = False
 if OUTPUT_VTK:
-    outfile_va    = File("./vtk/"+args.linearization+"/sol_va_ts.pvd")
-    outfile_eta   = File("./vtk/"+args.linearization+"/sol_eta_ts_"+str(L)+".pvd")
-    outfile_shear = File("./vtk/"+args.linearization+"/sol_shear_ts_"+str(L)+".pvd")
-    outfile_A     = File("./vtk/"+args.linearization+"/sol_A_ts_"+str(L)+".pvd")
-    outfile_H     = File("./vtk/"+args.linearization+"/sol_H_ts_"+str(L)+".pvd")
-    outfile_u     = File("./vtk/"+args.linearization+"/sol_u_ts_"+str(L)+".pvd")
+    outfile_va    = File("/scratch1/04841/tg841407/vtk_momonly/"+args.linearization+"/sol_va_ts.pvd")
+    outfile_eta   = File("/scratch1/04841/tg841407/vtk_momonly/"+args.linearization+"/sol_eta_ts_"+str(L)+".pvd")
+    outfile_shear = File("/scratch1/04841/tg841407/vtk_momonly/"+args.linearization+"/sol_shear_ts_"+str(L)+".pvd")
+    outfile_A     = File("/scratch1/04841/tg841407/vtk_momonly/"+args.linearization+"/sol_A_ts_"+str(L)+".pvd")
+    outfile_H     = File("/scratch1/04841/tg841407/vtk_momonly/"+args.linearization+"/sol_H_ts_"+str(L)+".pvd")
+    outfile_u     = File("/scratch1/04841/tg841407/vtk_momonly/"+args.linearization+"/sol_u_ts_"+str(L)+".pvd")
 
 #outfile_e   = File("/scratch/vtk/"+args.linearization+"/delta_"+str(L)+".pvd")
 
@@ -158,10 +158,10 @@ v_a.interpolate(as_vector([Constant(5.0*T/L),Constant(5.0*T/L)]))
 
 # visualize initial value
 if OUTPUT_VTK_INIT:
-    File("./vtk/"+args.linearization+"/initial_vo_"+str(L)+".pvd").write(v_ocean)
-    File("./vtk/"+args.linearization+"/initial_va_"+str(L)+".pvd").write(v_a)
-    File("./vtk/"+args.linearization+"/initial_H_"+str(L)+".pvd").write(sol_H)
-    File("./vtk/"+args.linearization+"/initial_A_"+str(L)+".pvd").write(sol_A)
+    File("/scratch1/04841/tg841407/vtk_momonly/"+args.linearization+"/initial_vo_"+str(L)+".pvd").write(v_ocean)
+    File("/scratch1/04841/tg841407/vtk_momonly/"+args.linearization+"/initial_va_"+str(L)+".pvd").write(v_a)
+    File("/scratch1/04841/tg841407/vtk_momonly/"+args.linearization+"/initial_H_"+str(L)+".pvd").write(sol_H)
+    File("/scratch1/04841/tg841407/vtk_momonly/"+args.linearization+"/initial_A_"+str(L)+".pvd").write(sol_A)
 
 ## Weak Form
 # set weak forms of objective functional and gradient

@@ -58,12 +58,12 @@ OUTPUT_VTK = False
 OUTPUT_VTK_INIT = False
 OUTPUT_YC = False
 if OUTPUT_VTK:
-    outfile_va    = File("/scratch/vtk/"+args.linearization+"/sol_va_ts.pvd")
-    outfile_eta   = File("/scratch/vtk/"+args.linearization+"/sol_eta_ts_"+str(L)+".pvd")
-    outfile_shear = File("/scratch/vtk/"+args.linearization+"/sol_shear_ts_"+str(L)+".pvd")
-    outfile_A     = File("/scratch/vtk/"+args.linearization+"/sol_A_ts_"+str(L)+".pvd")
-    outfile_H     = File("/scratch/vtk/"+args.linearization+"/sol_H_ts_"+str(L)+".pvd")
-    outfile_u     = File("/scratch/vtk/"+args.linearization+"/sol_u_ts_"+str(L)+".pvd")
+    outfile_va    = File("/scratch1/04841/tg841407/vtk/"+args.linearization+"/"+nrefstr+"/sol_va_ts.pvd")
+    outfile_eta   = File("/scratch1/04841/tg841407/vtk/"+args.linearization+"/"+nrefstr+"/sol_eta_ts_"+str(L)+".pvd")
+    outfile_shear = File("/scratch1/04841/tg841407/vtk/"+args.linearization+"/"+nrefstr+"/sol_shear_ts_"+str(L)+".pvd")
+    outfile_A     = File("/scratch1/04841/tg841407/vtk/"+args.linearization+"/"+nrefstr+"/sol_A_ts_"+str(L)+".pvd")
+    outfile_H     = File("/scratch1/04841/tg841407/vtk/"+args.linearization+"/"+nrefstr+"/sol_H_ts_"+str(L)+".pvd")
+    outfile_u     = File("/scratch1/04841/tg841407/vtk/"+args.linearization+"/"+nrefstr+"/sol_u_ts_"+str(L)+".pvd")
 
 #outfile_e   = File("/scratch/vtk/"+args.linearization+"/delta_"+str(L)+".pvd")
 
@@ -609,6 +609,6 @@ while t < Tfinal - 0.5*dt and ntstep == 0:
 
 # output vtk file for solutions
 if OUTPUT_VTK:
-    File("/scratch/vtk/"+args.linearization+"/solution_u.pvd").write(sol_u)
-    File("/scratch/vtk/"+args.linearization+"/solution_A.pvd").write(sol_A)
-    File("/scratch/vtk/"+args.linearization+"/solution_H.pvd").write(sol_H)
+    File("/scratch1/04841/tg841407/vtk/"+args.linearization+"/solution_u.pvd").write(sol_u)
+    File("/scratch1/04841/tg841407/vtk/"+args.linearization+"/solution_A.pvd").write(sol_A)
+    File("/scratch1/04841/tg841407/vtk/"+args.linearization+"/solution_H.pvd").write(sol_H)
