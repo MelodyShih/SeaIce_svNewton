@@ -30,6 +30,8 @@ PETSc.Sys.popErrorHandler()
 
 parser = argparse.ArgumentParser(add_help=False)
 parser.add_argument("--linearization", type=str, default="stdnewton")
+parser.add_argument("--solver", type=str, default="amg")
+parser.add_argument("--nref", type=int, default=0)
 args, _ = parser.parse_known_args()
 
 #======================================
@@ -49,6 +51,8 @@ T = 1e3       # 1e3 second
 L = 1e3       # 1e3 m
 G = 1         # 1 m
 
+nref = args.nref
+nrefstr = str(nref)
 ## Output
 OUTPUT_VTK = False
 OUTPUT_VTK_INIT = False
@@ -66,12 +70,22 @@ if OUTPUT_VTK:
 
 ## Domain: (0,1)x(0,1)
 distp = {"partition": True, "overlap_type": (DistributedMeshOverlapType.VERTEX, 1)}
+def before(dm, i):
+    for p in range(*dm.getHeightStratum(1)):
+        dm.setLabelValue("prolongation", p, i+1)
+    for p in range(*dm.getDepthStratum(0)):
+        dm.setLabelValue("prolongation", p, i+1)
+
+def after(dm, i):
+    for p in range(*dm.getHeightStratum(1)):
+        dm.setLabelValue("prolongation", p, i+2)
+    for p in range(*dm.getDepthStratum(0)):
+        dm.setLabelValue("prolongation", p, i+2)
 dim = 2
 Nx = Ny = int(512/4.0)
 Lx = Ly = 512*1000/L
-basemesh = RectangleMesh(Nx, Ny, Lx, Ly, distribution_parameters=distp, quadrilateral=False)
-nref = 1
-mh = MeshHierarchy(basemesh, nref, reorder=True,
+basemesh = RectangleMesh(Nx, Ny, Lx, Ly, distribution_parameters=distp, quadrilateral=True)
+mh = MeshHierarchy(basemesh, nref, reorder=True,callbacks=(before,after),
                    distribution_parameters=distp)
 mesh = mh[-1]
 PETSc.Sys.Print("[info] dx in km", (512*1000/L)/Nx/2**nref)
@@ -171,9 +185,9 @@ WeakForm.update_va(mx, my, 0.0, X, v_a, T, L)
 
 # visualize initial value
 if OUTPUT_VTK_INIT:
-    File("/scratch/vtk/"+args.linearization+"/initial_vo_"+str(L)+".pvd").write(v_ocean)
-    File("/scratch/vtk/"+args.linearization+"/initial_va_"+str(L)+".pvd").write(v_a)
-    File("/scratch/vtk/"+args.linearization+"/initial_H_"+str(L)+".pvd").write(sol_H)
+    File("/scratch1/04841/tg841407/vtk/"+args.linearization+"/"+nrefstr+"/initial_vo_"+str(L)+".pvd").write(v_ocean)
+    File("/scratch1/04841/tg841407/vtk/"+args.linearization+"/"+nrefstr+"/initial_va_"+str(L)+".pvd").write(v_a)
+    File("/scratch1/04841/tg841407/vtk/"+args.linearization+"/"+nrefstr+"/initial_H_"+str(L)+".pvd").write(sol_H)
 
 ## Weak Form
 # set weak forms of objective functional and gradient
@@ -199,10 +213,97 @@ elif args.linearization == 'stressvel':
     dualres = WeakForm.dualresidual(S, sol_u, Vd, delta_min)
     hess = WeakForm.hessian_NewtonStressvel(sol_u, S_proj, sol_A, sol_H, V, rhoice, \
                dt, Ca, rhoa, v_a, Co, rhoo, v_ocean, delta_min, Pstar, fc)
+elif args.linearization == 'stressvelsym':
+    if Vd is None:
+        raise ValueError("stressvel not implemented for discretisation %s" \
+                                   % vvstokesprob.discretisation)
+    S      = Function(Vd)
+    S_step = Function(Vd)
+    S_proj = Function(Vd)
+    S_prev = Function(Vd)
+
+    dualStep = WeakForm.hessian_dualStep_Sym(sol_u, step_u, S, Vd, delta_min)
+    dualres = WeakForm.dualresidual(S, sol_u, Vd, delta_min)
+    hess = WeakForm.hessian_NewtonStressvel_Sym(sol_u, S_proj, sol_A, sol_H, V, rhoice, \
+               dt, Ca, rhoa, v_a, Co, rhoo, v_ocean, delta_min, Pstar, fc)
 else:
     raise ValueError("unknown type of linearization %s" % args.linearization)
 
-transfer = firedrake.TransferManager()
+transfer = TransferManager()
+mg_levels_solver_patch = {
+    #"ksp_monitor_true_residual": None,
+    "ksp_type": "fgmres",
+    "ksp_norm_type": "unpreconditioned",
+    "ksp_max_it": 5,
+    "pc_type": "python",
+    "pc_python_type": "firedrake.ASMStarPC",
+    "pc_star_construct_dim": 0,
+    "pc_star_backend": "petscasm",
+    "pc_star_sub_sub_pc_factor_in_place": None,
+}
+mg_levels_solver = {
+    "ksp_type": "fgmres",
+    "ksp_max_it": 10,
+    "ksp_norm_type": "unpreconditioned",
+    #"ksp_view": None,
+    #"ksp_monitor_true_residual": None,
+    "pc_type": "bjacobi",
+}
+if args.solver == 'mg':
+    params = {
+        "snes_type": "ksponly",
+        #"mat_type": "aij",
+        #"pmat_type": "aij",
+        "ksp_rtol": 1.0e-4,
+        "ksp_atol": 1.0e-10,
+        "ksp_max_it": 500,
+        "ksp_monitor_true_residual": None,
+        #"ksp_converged_reason": None,
+        "ksp_type": "fgmres",
+        "ksp_gmres_restart": 200,
+        "pc_type": "mg",
+        "pc_mg_type": "full",
+        "mg_levels": mg_levels_solver_patch, #or, mg_levels_solver_patch
+        "mg_coarse_pc_type": "python",
+        "mg_coarse_pc_python_type": "firedrake.AssembledPC",
+        "mg_coarse_assembled_pc_type": "lu",
+        "mg_coarse_assembled_pc_factor_mat_solver_type": "mumps",
+    }
+elif args.solver == 'amg':
+    params = {
+        "snes_type": "ksponly",
+        "ksp_rtol": 1.0e-4,
+        "ksp_atol": 1.0e-10,
+        "ksp_max_it": 300,
+        #"ksp_monitor_true_residual": None,
+        "ksp_converged_reason": None,
+        "ksp_type": "fgmres",
+        "ksp_gmres_restart": 300,
+        "pc_type": "hypre",
+        "pc_hypre_boomeramg_grid_sweeps_down": 3,
+        "pc_hypre_boomeramg_grid_sweeps_up": 3,
+        #"pc_hypre_boomeramg_print_statistics": None,
+        "pc_hypre_boomeramg_strong_threshold": 0.5,
+        #"pc_hypre_boomeramg_agg_nl": 2,
+        #"pc_hypre_boomeramg_print_debug": None
+    }
+elif args.solver == 'ilu':
+    params = {
+        "snes_type": "ksponly",
+        "ksp_rtol": 1.0e-4,
+        "ksp_atol": 1.0e-10,
+        "ksp_max_it": 300,
+        #"ksp_converged_reason": None,
+        #"ksp_monitor_true_residual": None,
+        #"ksp_view": None,
+        "ksp_type": "fgmres",
+        "ksp_gmres_restart": 300,
+        "ksp_norm_type": "unpreconditioned",
+        "pc_type": "ilu",
+        "pc_factor_levels": 2
+    }
+else:
+    raise ValueError("unknown type of solver %s" % args.solver)
 
 # set weak form of convergence law for A
 Ate = TestFunction(A)
@@ -244,12 +345,12 @@ sol_H1 = Function(H); sol_H2 = Function(H)
 L2 = replace(L1, {sol_H: sol_H1}); L3 = replace(L1, {sol_H: sol_H2})    
 
 probH1 = LinearVariationalProblem(a_H, L1, step_H)
-solvH1 = LinearVariationalSolver(probH1)
+solvH1 = LinearVariationalSolver(probH1, solver_parameters=params)
 solvH1.set_transfer_manager(transfer)
 probH2 = LinearVariationalProblem(a_H, L2, step_H)
-solvH2 = LinearVariationalSolver(probH2)
+solvH2 = LinearVariationalSolver(probH2, solver_parameters=params)
 probH3 = LinearVariationalProblem(a_H, L3, step_H)
-solvH3 = LinearVariationalSolver(probH3)
+solvH3 = LinearVariationalSolver(probH3, solver_parameters=params)
 
 if args.linearization == 'stressvel' or args.linearization == 'stressvelsym':
     Vdmassweak = inner(TrialFunction(Vd), TestFunction(Vd)) * dx
@@ -404,52 +505,6 @@ while t < Tfinal - 0.5*dt and ntstep == 0:
                     Sprojpercent = assemble(S_ind)/Lx/Ly
         
             # assemble linearized system
-            mg_levels_solver_patch = {
-                #"ksp_monitor_true_residual": None,
-                "ksp_type": "fgmres",
-                "ksp_norm_type": "unpreconditioned",
-                "ksp_max_it": 5,
-                "pc_type": "python",
-                "pc_python_type": "firedrake.ASMStarPC",
-                "pc_star_construct_dim": 0,
-                "pc_star_backend": "petscasm",
-                "pc_star_sub_sub_pc_factor_in_place": None,
-            }
-            mg_levels_solver = {
-                "ksp_type": "fgmres",
-                "ksp_max_it": 10,
-                "ksp_norm_type": "unpreconditioned",
-                #"ksp_view": None,
-                #"ksp_monitor_true_residual": None,
-                #"pc_type": "bjacobi",
-            }
-            params = {
-                "snes_type": "ksponly",
-                "snes_rtol": 1e-4,
-                "snes_atol": 1e-10,
-                #"mat_type": "aij",
-                #"pmat_type": "aij",
-                "ksp_rtol": 1.0e-4,
-                "ksp_atol": 1.0e-10,
-                "ksp_max_it": 500,
-                #"ksp_monitor_true_residual": None,
-                #"ksp_converged_reason": None,
-                #"ksp_type": "preonly",
-                #"pc_type": "lu",
-                #"pc_factor_mat_solver_type": "mumps",
-                #"ksp_view": None,
-                "ksp_type": "fgmres",
-                "ksp_gmres_restart": 200,
-                "pc_type": "mg",
-                #"pc_mg_type": "full",
-                #"pc_mg_type": "multiplicative",
-                "pc_mg_cycle_type": "v",
-                "mg_levels": mg_levels_solver,
-                "mg_coarse_pc_type": "python",
-                "mg_coarse_pc_python_type": "firedrake.AssembledPC",
-                "mg_coarse_assembled_pc_type": "lu",
-                "mg_coarse_assembled_pc_factor_mat_solver_type": "mumps",
-            }
             problem = LinearVariationalProblem(hess, grad, step_u, bcs=bcstep_u)
             solver  = LinearVariationalSolver(problem, solver_parameters=params,
                                               options_prefix="ns_")
