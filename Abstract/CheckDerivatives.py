@@ -7,6 +7,7 @@ Author:             Johann Rudi
 '''
 
 import firedrake as fd
+from firedrake.petsc import  PETSc
 import math
 
 import Abstract.WeakForm
@@ -58,7 +59,7 @@ def gradient(g, obj_weak, obj_arg, obj_perturb=None, grad_perturb=None, n_checks
         abs_error = math.fabs(grad_dir_ref - grad_dir_fd)
         rel_error = abs_error / math.fabs(grad_dir_ref)
 
-        print("Gradient check vs FD: " + \
+        PETSc.Sys.Print("Gradient check vs FD: " + \
               "eps=%.1e ; error abs=%.1e, rel=%.1e ; " % (eps, abs_error, rel_error) + \
               "(grad,dir) ref=%.6e, FD=%.6e" % (grad_dir_ref, grad_dir_fd))
 
@@ -105,9 +106,43 @@ def hessian(H, obj_weak, obj_arg, obj_perturb=None, hess_perturb=None, n_checks=
         abs_error = math.fabs(hess_dir_ref - hess_dir_fd)
         rel_error = abs_error / math.fabs(hess_dir_ref)
 
-        print("Hessian check vs FD: " + \
+        PETSc.Sys.Print("Hessian check vs FD: " + \
               "eps=%.1e ; error abs=%.1e, rel=%.1e ; " % (eps, abs_error, rel_error) + \
               "(dir,H*dir) ref=%.6e, FD=%.6e" % (hess_dir_ref, hess_dir_fd))
 
     # restore the argument of the objective functional
     obj_arg.assign(obj_arg_prev)
+
+def hessian(H, res_weak, res_arg, steplength, hess_perturb, n_checks=6):
+    ''' Checks the given Hessian with the approximation from finite diffdrences of nonlinear res. '''
+    # set parameters for the exponent of epsilon
+    exp_init = 0
+    exp_decr = -2
+
+    # compute refdrence derivative
+    hess_perturb_out = hess_perturb.copy(deepcopy=True)
+    with hess_perturb.dat.vec_ro as v:
+        with hess_perturb_out.dat.vec_wo as y:
+            H.petscmat.mult(-v, y)
+    # compute reusable value of the objective functional
+    steplength.assign(fd.Constant(0.0))
+    res_curr = fd.assemble(res_weak)
+
+    for k in range(n_checks):
+        # set finite diffdrence length
+        eps = math.pow(10.0, exp_init + exp_decr*k)
+        steplength.assign(fd.Constant(eps))
+
+        # evaluate objective at perturbation
+        res_perturb = fd.assemble(res_weak)
+
+        # compute finite diffdrence gradient in perturbed direction
+        gradres_dir_fd = (res_perturb - res_curr) / eps
+
+        # compute error
+        abs_error = fd.norm(hess_perturb_out - gradres_dir_fd)
+        rel_error = abs_error / fd.norm(hess_perturb_out)
+
+        PETSc.Sys.Print("Hess check vs FD: " + \
+              "eps=%.1e ; error abs=%.1e, rel=%.1e ; " % (eps, abs_error, rel_error) + \
+              "norm(hess,dir) ref=%.6e, FD=%.6e" % (fd.norm(hess_perturb_out), fd.norm(gradres_dir_fd)))

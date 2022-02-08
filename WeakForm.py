@@ -13,6 +13,8 @@ import numpy as np
 import math
 import sys
 
+import Abstract
+
 QUAD_DEG=15
 
 def delta(u):
@@ -174,6 +176,49 @@ def gradient(u, uprev, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o, rho_o, v_o,
 	grad = AA - F
 
 	return grad
+
+def nonlinearres_NewtonStressvel(u, uprev, V, S, Vd, A, H, rho_i, dt, C_a, rho_a,
+                                 v_a, C_o, rho_o, v_o, delta_min, Pstar, f_c, steplen,
+                                 u_perturb):
+  '''
+  Creates the weak form for the nonlinear residual:
+  TODO
+  '''
+  tau_u        = tau(u)
+  tau_uperturb = tau(u_perturb)
+  delta        = fd.sqrt(delta_min**2+2*fd.inner(tau_u,tau_u))
+  delta_sq     = delta_min**2+2*fd.inner(tau_u,tau_u)
+  scale = fd.conditional( fd.lt(2*fd.inner(S, S), 1.0), 1.0, math.sqrt(2)*fd.sqrt(fd.inner(S,S)))
+  S_perturb = -S \
+              - 2.0/delta_sq/scale*fd.inner(tau_uperturb, tau_u)*S\
+              + 1.0/delta*(tau_uperturb+tau_u)
+  #S_perturb = - 2.0/delta_sq*fd.inner(tau_uperturb, tau_u)*S/scale\
+  #            + 1.0/delta*(tau_uperturb)
+
+  ute = fd.TestFunction(V)
+
+  tau_a = tau_atm(C_a, rho_a, v_a)
+  tau_o = tau_ocean(C_o, rho_o, u+steplen*u_perturb, v_o)
+
+  tau_ute = tau(ute)
+  Ete = fd.sym(fd.nabla_grad(ute))
+
+  P  = Pstar*H*fd.exp(-20*(1.0-A))
+  F  = rho_i*H*fd.inner(uprev, ute)*fd.dx(degree=QUAD_DEG) + \
+            dt*fd.inner(tau_a, ute)*fd.dx(degree=QUAD_DEG)
+
+  AA = rho_i*H*fd.inner(u, ute)*fd.dx(degree=QUAD_DEG)\
+       + dt*P*fd.inner(S, tau_ute)*fd.dx(degree=QUAD_DEG)\
+       - dt*0.5*P*fd.tr(Ete)*fd.dx(degree=QUAD_DEG)
+
+  AA +=  steplen*rho_i*H*fd.inner(u_perturb, ute)*fd.dx(degree=QUAD_DEG)\
+       + steplen*   dt*P*fd.inner(S_perturb, tau_ute)*fd.dx(degree=QUAD_DEG)\
+
+  if (abs(C_o) > 1e-15):
+    AA += -dt*fd.inner(tau_o, ute)*fd.dx(degree=QUAD_DEG)
+
+  #return nonlinearres
+  return F - AA
 
 def hessian_NewtonStandard(u, A, H, FncSp, rho_i, dt, C_a, rho_a, v_a, C_o,
 	                       rho_o, v_o, delta_min, Pstar, f_c):

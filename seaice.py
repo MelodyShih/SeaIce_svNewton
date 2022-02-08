@@ -37,6 +37,7 @@ args, _ = parser.parse_known_args()
 #======================================
 ## nolinear solver parameters
 NL_CHECK_GRADIENT = False
+NL_CHECK_HESSIAN = True
 MONITOR_NL_ITER = True
 MONITOR_NL_STEPSEARCH = False
 NL_SOLVER_GRAD_RTOL = 1e-4
@@ -148,6 +149,7 @@ fc = 0.0 #1.46e-4/T #s^{-1}
 Ca = 1.2e-3*L/G 
 # water drag coeff.
 Co = 5.5e-3*L/G
+#Co = 0.0
 # air density
 rhoa = 1.3/900.0 #kg/m^3 
 rhoo = 1026.0/900.0 #kg/m^3
@@ -468,6 +470,7 @@ while t < Tfinal - 0.5*dtt:
             Ainv.mult(v, hproj)
 
     ### Solve the momentum equation
+    nlsolve_success = False
     if ntstep % ntrans == 0:
         # initialize gradient
         g = assemble(grad, bcs=bcstep_u)
@@ -556,7 +559,7 @@ while t < Tfinal - 0.5*dtt:
             g_norm = norm(g)
 
             # check derivatives
-            if NL_CHECK_GRADIENT and itn < 2:
+            if NL_CHECK_GRADIENT or NL_CHECK_HESSIAN:
                 perturb_u       = Function(V)
                 perturb_uscaled = Function(V)
         
@@ -575,8 +578,20 @@ while t < Tfinal - 0.5*dtt:
                                              perturb_uscaled, bcs=bcstep_u)
                 s = LinearVariationalSolver(p, options_prefix="gradcheck_")
                 s.solve()
-                Abstract.CheckDerivatives.gradient(g.vector(), obj, sol_u, obj_perturb=perturb_uscaled, \
-                        grad_perturb=perturb_uscaled, n_checks=8)
+                WeakForm.applyBoundaryConditions(perturb_u, bcstep_u)
+                if NL_CHECK_GRADIENT:
+                    Abstract.CheckDerivatives.gradient(g.vector(), obj, sol_u,
+                        obj_perturb=perturb_uscaled, grad_perturb=perturb_uscaled, n_checks=8)
+                if NL_CHECK_HESSIAN:
+                    #Hess = assemble(hess, bcs=bcstep_u)
+                    Hess = assemble(hess)
+                    R = FunctionSpace(mesh, 'R', 0)
+                    steplength = Function(R)
+                    res = WeakForm.nonlinearres_NewtonStressvel(sol_u, sol_uprevt, V, S, Vd, sol_A, \
+                              sol_H, rhoice, dt, Ca, rhoa, v_a, Co, rhoo, v_ocean, delta_min, \
+                              Pstar, fc, steplength, perturb_uscaled)
+                    Abstract.CheckDerivatives.hessian(Hess, res, sol_u, steplength,
+                                                      perturb_u, n_checks=6)
         
             # compute angle between step and (negative) gradient
             angle_grad_step = -step_u.vector().inner(g)
