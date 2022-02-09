@@ -125,13 +125,13 @@ def hessian(H, res_weak, res_arg, steplength, hess_perturb, n_checks=6):
         with hess_perturb_out.dat.vec_wo as y:
             H.petscmat.mult(-v, y)
     # compute reusable value of the objective functional
-    steplength.assign(fd.Constant(0.0))
+    steplength.assign(0.0)
     res_curr = fd.assemble(res_weak)
 
     for k in range(n_checks):
         # set finite diffdrence length
         eps = math.pow(10.0, exp_init + exp_decr*k)
-        steplength.assign(fd.Constant(eps))
+        steplength.assign(eps)
 
         # evaluate objective at perturbation
         res_perturb = fd.assemble(res_weak)

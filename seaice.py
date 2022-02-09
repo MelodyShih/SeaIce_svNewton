@@ -584,7 +584,6 @@ while t < Tfinal - 0.5*dtt:
                     Abstract.CheckDerivatives.gradient(g.vector(), obj, sol_u,
                         obj_perturb=perturb_uscaled, grad_perturb=perturb_uscaled, n_checks=8)
                 if NL_CHECK_HESSIAN:
-                    #Hess = assemble(hess, bcs=bcstep_u)
                     Hess = assemble(hess)
                     R = FunctionSpace(mesh, 'R', 0)
                     steplength = Function(R)
@@ -592,7 +591,7 @@ while t < Tfinal - 0.5*dtt:
                               sol_H, rhoice, dt, Ca, rhoa, v_a, Co, rhoo, v_ocean, delta_min, \
                               Pstar, fc, math.sqrt(0.5), steplength, perturb_uscaled)
                     Abstract.CheckDerivatives.hessian(Hess, res, sol_u, steplength,
-                                                      perturb_u, n_checks=6)
+                                                      perturb_uscaled, n_checks=6)
         
             # compute angle between step and (negative) gradient
             angle_grad_step = -step_u.vector().inner(g)

@@ -190,7 +190,7 @@ def nonlinearres_NewtonStressvel(u, uprev, V, S, Vd, A, H, rho_i, dt, C_a, rho_a
 	delta_sq     = delta_min**2+2*fd.inner(tau_u,tau_u)
 	scale = fd.conditional( fd.lt(fd.inner(S, S), maxmag*maxmag), 1.0, maxmag/fd.sqrt(fd.inner(S,S)))
 	S_perturb = - S\
-	            - 2.0/delta_sq/scale*fd.inner(tau_uperturb, tau_u)*S\
+	            - 2.0/delta_sq*scale*fd.inner(tau_uperturb, tau_u)*S\
 	            + 1.0/delta*(tau_uperturb+tau_u)
 	#S_perturb = - 2.0/delta_sq*fd.inner(tau_uperturb, tau_u)*S*scale\
 	#            + 1.0/delta*(tau_uperturb)
@@ -238,18 +238,30 @@ def nonlinearres_NewtonStressvel_notau(u, uprev, V, S, Vd, A, H, rho_i, dt, C_a,
 	scale = fd.conditional( fd.lt(fd.inner(S, S), maxmag*maxmag), 1.0, maxmag/fd.sqrt(fd.inner(S,S)))
 	Eper = fd.sym(fd.nabla_grad(u_per))
 
+    # Without symmetrization
+	#S_per = - S\
+	#        - 2.0/delta_sq*fd.inner(esqinv*fd.dev(Eper)+0.5*fd.tr(Eper)*I, grad_u)*S*scale\
+	#        + 1.0/delta*(1./e*fd.dev(Eper) + 0.5*fd.tr(Eper)*I)\
+	#        + 1.0/delta*(1./e*fd.dev(E)    + 0.5*fd.tr(E)*I)
+	#S_per = - 2.0/delta_sq*fd.inner(esqinv*fd.dev(Eper)+0.5*fd.tr(Eper)*I, grad_u)*S*scale\
+	#        + 1.0/delta*(1./e*fd.dev(Eper) + 0.5*fd.tr(Eper)*I)
+
+    # With symmetrization
 	S_per = - S\
-	        - 2.0/delta_sq*fd.inner(esqinv*fd.dev(Eper)+0.5*fd.tr(Eper)*I, grad_u)*S*scale\
+	        - 1.0/delta_sq*fd.inner(esqinv*fd.dev(Eper)+0.5*fd.tr(Eper)*I, grad_u)*S*scale\
+	        - 1.0/delta_sq*(1./e*fd.inner(S*scale,fd.dev(Eper))+0.5*fd.tr(S*scale)*fd.tr(Eper))*\
+	                                                              (1./e*fd.dev(E) + 0.5*fd.tr(E)*I)\
 	        + 1.0/delta*(1./e*fd.dev(Eper) + 0.5*fd.tr(Eper)*I)\
 	        + 1.0/delta*(1./e*fd.dev(E)    + 0.5*fd.tr(E)*I)
-	#S_per = - 2.0/delta_sq*fd.inner(esqinv*fd.dev(Eper)+0.5*fd.tr(Eper)*I, grad_u)*S*scale
+	#S_per = - 1.0/delta_sq*fd.inner(esqinv*fd.dev(Eper)+0.5*fd.tr(Eper)*I, grad_u)*S*scale\
+	#        - 1.0/delta_sq*(1./e*fd.inner(S*scale,fd.dev(Eper))+0.5*fd.tr(S*scale)*fd.tr(Eper))*\
+	#                                                              (1./e*fd.dev(E) + 0.5*fd.tr(E)*I)\
 	#        + 1.0/delta*(1./e*fd.dev(Eper) + 0.5*fd.tr(Eper)*I)
 	
 	ute      = fd.TestFunction(V)
 	grad_ute = fd.nabla_grad(ute)
 	
 	tau_a = tau_atm(C_a, rho_a, v_a)
-	tau_o = tau_ocean(C_o, rho_o, u+steplen*u_per, v_o)
 	
 	P  = Pstar*H*fd.exp(-20*(1.0-A))
 	F  = rho_i*H*fd.inner(uprev, ute)*fd.dx(degree=QUAD_DEG) +\
@@ -263,7 +275,8 @@ def nonlinearres_NewtonStressvel_notau(u, uprev, V, S, Vd, A, H, rho_i, dt, C_a,
 	     + steplen*dt*P*fd.inner(einv*S_per+0.5*(1-einv)*fd.tr(S_per)*I,grad_ute)*fd.dx(degree=QUAD_DEG)
 	
 	if (abs(C_o) > 1e-15):
-	  AA += -dt*fd.inner(tau_o, ute)*fd.dx(degree=QUAD_DEG)
+		tau_o = tau_ocean(C_o, rho_o, u+steplen*u_per, v_o)
+		AA += -dt*fd.inner(tau_o, ute)*fd.dx(degree=QUAD_DEG)
 	
 	return F - AA
 
