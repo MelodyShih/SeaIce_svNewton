@@ -248,12 +248,12 @@ def nonlinearres_NewtonStressvel_notau(u, uprev, V, S, Vd, A, H, rho_i, dt, C_a,
 
     # With symmetrization
 	S_per = - S\
-	        - 1.0/delta_sq*fd.inner(esqinv*fd.dev(Eper)+0.5*fd.tr(Eper)*I, grad_u)*S*scale\
+	        - 1.0/delta_sq*(esqinv*fd.inner(fd.dev(Eper),fd.dev(E))+0.5*fd.tr(Eper)*fd.tr(E))*S*scale\
 	        - 1.0/delta_sq*(1./e*fd.inner(S*scale,fd.dev(Eper))+0.5*fd.tr(S*scale)*fd.tr(Eper))*\
 	                                                              (1./e*fd.dev(E) + 0.5*fd.tr(E)*I)\
 	        + 1.0/delta*(1./e*fd.dev(Eper) + 0.5*fd.tr(Eper)*I)\
 	        + 1.0/delta*(1./e*fd.dev(E)    + 0.5*fd.tr(E)*I)
-	#S_per = - 1.0/delta_sq*fd.inner(esqinv*fd.dev(Eper)+0.5*fd.tr(Eper)*I, grad_u)*S*scale\
+	#S_per = - 1.0/delta_sq*(esqinv*fd.inner(fd.dev(Eper),fd.dev(E))+0.5*fd.tr(Eper)*fd.tr(E))*S*scale\
 	#        - 1.0/delta_sq*(1./e*fd.inner(S*scale,fd.dev(Eper))+0.5*fd.tr(S*scale)*fd.tr(Eper))*\
 	#                                                              (1./e*fd.dev(E) + 0.5*fd.tr(E)*I)\
 	#        + 1.0/delta*(1./e*fd.dev(Eper) + 0.5*fd.tr(Eper)*I)
